@@ -2,7 +2,7 @@
 
 **Current item:** T1.18 Tier 1 release (waiting on S3 for the Windows build)
 **Last finished:** T1.17 print
-**Next up:** Tier 2 from T2.1 while S3 is blocked
+**Next up:** T2.4 erase and redact (Tier 2 continues while S3 is blocked)
 
 ## How to install
 Download `Drawset-Setup-<version>.exe` from the latest GitHub Release (https://github.com/wmckenziegp/drawset/releases) and run it. Windows SmartScreen may warn because the installer is not code-signed: choose "More info" then "Run anyway".
@@ -24,3 +24,6 @@ Download `Drawset-Setup-<version>.exe` from the latest GitHub Release (https://g
 - T1.15: CSV test checks every row against the model; cells that would run as spreadsheet formulas get a leading apostrophe; text columns sort with a collator; ties no longer reorder when a row is edited. E2E: 5,000 markups, virtualised rows, p95 frame under 50 ms, filter, status, export. 500 markups save in well under 3 s.
 - T1.16: unit tests for reorder/rotate/delete/insert blank/insert from file/extract with undo, checked in MuPDF and pdf.js. Found and fixed: inserted pages lost their markups (MuPDF's graftPage drops /Annots).
 - T1.17: e2e checks the print view has the chosen pages at actual size (A1 = 841 × 594 mm).
+- T2.1: page scales (metric 1:1–1:1000 presets, imperial presets, or two picked points and a known length) for one page, all pages or a range; precision and display units; stored as /VP viewports with /Measure /RL (R, X, D, A number formats). Full-page viewports are replaced; smaller detail viewports are kept. Scale changes are one undo step and recalculate measurements. The calibration fixture measures within 0.1%.
+- T2.2: length, polylength, area with cutouts (polygon-clipping, analytic tests incl. overlapping and partly outside cutouts), perimeter, count and angle, each with a caption drawn into its appearance stream. Written as /Line /IT /LineDimension, /PolyLine /IT /PolyLineDimension, /Polygon /IT /PolygonDimension with /Measure; values identical after reopening. Measurements panel shows the page scale, the selection and page totals.
+- T2.3: Markups List has a Measurement column and totals by type and unit; Export quantities writes unrounded values plus totals (unit test checks totals equal the sum). Fixed a layout bug where a wide toolbar pushed the right panel off screen.

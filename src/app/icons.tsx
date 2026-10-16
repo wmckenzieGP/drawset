@@ -37,6 +37,14 @@ const P: Record<string, ReactElement> = {
   pages: <path d="M7 3h8l4 4v12H7zM5 7v14h11" />,
   bookmark: <path d="M7 3h10v18l-5-4-5 4z" />,
   list: <path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" />,
+  length: <path d="M4 15l16-6M4 11.5l1.5 4M18.5 5.5L20 9.5M9 13.2l-.6-1.6M13.5 11.5l-.6-1.6" />,
+  polylength: <path d="M3 18l6-8 5 5 7-9M3 18h.01M9 10h.01M14 15h.01M21 6h.01" />,
+  area: <path d="M4 6l9-2 7 6-3 10H6zM8 11l3 3M9 16l4-4M13 17l3-3" />,
+  perimeter: <path d="M4 6l9-2 7 6-3 10H6z" strokeDasharray="2.5 2" />,
+  count: <path d="M7 7.5a2 2 0 110 .01M17 7.5a2 2 0 110 .01M7 16.5a2 2 0 110 .01M17 16.5a2 2 0 110 .01" />,
+  angle: <path d="M4 19h16M4 19L15 5M10 19a6 6 0 00-2.4-4.8" />,
+  cutout: <path d="M4 5h16v14H4zM9 9h6v6H9z" />,
+  calibrate: <path d="M3 9h18v6H3zM7 9v3M11 9v3M15 9v3M19 9v2" />,
   props: <path d="M4 7h10M18 7h2M4 17h4M12 17h8M14 4v6M8 14v6" />,
 };
 

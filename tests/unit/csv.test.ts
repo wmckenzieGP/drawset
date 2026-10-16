@@ -8,6 +8,7 @@ const pages: PageEntry[] = ["A-101", "A-102", "M-1"].map((label, i) => ({
   id: `p${i}`,
   src: i,
   rotation: 0,
+  scale: null,
   info: { index: i, label, bounds: [0, 0, 1190, 842], rotate: 0 } as PageEntry["info"],
 }));
 
@@ -64,5 +65,34 @@ describe("markups CSV", () => {
     expect(byAuthor).toEqual(["A", "Āria Ngata", "B", "Jo Smith"]);
     const byDate = sortRows(rows, "date", -1).map((r) => r.modified);
     expect(byDate).toEqual([...byDate].sort().reverse());
+  });
+});
+
+describe("quantities CSV", () => {
+  it("lists each measurement unrounded and totals by type and unit", async () => {
+    const { quantitiesCsv } = await import("../../src/features/markupsList/csv");
+    const scale = { paper: 1, paperUnit: "mm" as const, real: 100, realUnit: "mm" as const, displayUnit: "m" as const, precision: 2 };
+    const k = 1 / 0.0352777777778; // points per metre at 1:100
+    const list = [
+      mk("length", { pageId: "p0", points: [[0, 0], [10 * k, 0]], measure: { scale, cutouts: [] } }),
+      mk("length", { pageId: "p1", points: [[0, 0], [2.5 * k, 0]], measure: { scale, cutouts: [] } }),
+      mk("area", { pageId: "p0", points: [[0, 0], [4 * k, 0], [4 * k, 2 * k], [0, 2 * k]], measure: { scale, cutouts: [] } }),
+      mk("rectangle", { pageId: "p0" }),
+    ];
+    const rows = markupRows(Object.fromEntries(list.map((m) => [m.id, m])), pages);
+    const table = parseCsv(quantitiesCsv(sortRows(rows, "page", 1)));
+    expect(table[0][4]).toBe("Quantity");
+    const body = table.slice(1).filter((r) => r[0] && r[0] !== "Total");
+    expect(body.length).toBe(3);
+    const totals = table.filter((r) => r[0] === "Total");
+    const len = totals.find((r) => r[2] === "Length")!;
+    expect(Number(len[4])).toBeCloseTo(12.5, 6);
+    expect(len[5]).toBe("m");
+    expect(len[3]).toBe("2 items");
+    expect(Number(totals.find((r) => r[2] === "Area")![4])).toBeCloseTo(8, 6);
+    expect(totals.find((r) => r[2] === "Area")![5]).toBe("m²");
+    // totals equal the sum of the listed quantities
+    const sum = body.filter((r) => r[2] === "Length").reduce((s, r) => s + Number(r[4]), 0);
+    expect(sum).toBeCloseTo(Number(len[4]), 9);
   });
 });

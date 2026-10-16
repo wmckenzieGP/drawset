@@ -8,6 +8,7 @@ import type { Markup } from "../../markup/model";
 import type { DocInfo, MarkupRecord, OutlineNode, PageInfo, RenderRequest, SavePlan, SearchHit } from "../types";
 import { readPageMarkups } from "./annotRead";
 import { deleteAnnotationTree, ensurePopup, invertCtm, subtypeFor, writeMarkup, writeStatus, type WriteContext } from "./annotWrite";
+import { safePageScale, writePageScale } from "./measureDict";
 
 export interface RawBitmap {
   width: number;
@@ -73,7 +74,8 @@ export function pageInfo(doc: mupdf.PDFDocument, index: number): PageInfo {
   } catch {
     label = "";
   }
-  return { index, bounds: page.getBounds() as Rect, rotate: pageRotate(page), label: label || String(index + 1), ctm: page.getTransform() as Matrix };
+  const scale = safePageScale(page);
+  return { index, bounds: page.getBounds() as Rect, rotate: pageRotate(page), label: label || String(index + 1), ctm: page.getTransform() as Matrix, scale };
 }
 
 function outlineNodes(doc: mupdf.PDFDocument, items: ReturnType<mupdf.Document["loadOutline"]>): OutlineNode[] {
@@ -93,12 +95,15 @@ function outlineNodes(doc: mupdf.PDFDocument, items: ReturnType<mupdf.Document["
 }
 
 /**
- * MuPDF's graftPage leaves /Annots behind, so markups are copied separately. Back-references to the source
+ * MuPDF's graftPage leaves /Annots and /VP behind, so markups are copied separately. Back-references to the source
  * page (/P) and links to its other pages would drag the whole source page tree along, so /P is rewritten and
  * page links and form widgets (which need the source's form) are not carried across.
  */
 function copyAnnotations(dst: mupdf.PDFDocument, graft: mupdf.PDFGraftMap, src: mupdf.PDFDocument, srcIndex: number, dstIndex: number) {
   const srcPage = src.findPage(srcIndex);
+  // page scales (viewports) are not copied by graftPage either
+  const vp = srcPage.get("VP");
+  if (vp.isArray()) dst.findPage(dstIndex).put("VP", graft.graftObject(vp));
   const annots = srcPage.get("Annots");
   if (!annots.isArray()) return;
   const keep = src.newArray();
@@ -355,6 +360,11 @@ export class EngineCore {
         if (markup.kind === "note") ensurePopup(ctx, obj, markup);
         if (markup.kind !== "foreign") writeStatus(ctx, obj, markup);
       }
+    }
+    // page scales (before rotation, so the viewport box matches the page as it is now)
+    for (const p of plan.pages) {
+      if (p.scale === undefined || p.index < 0 || p.index >= pageCount) continue;
+      writePageScale(doc, doc.loadPage(p.index), p.scale);
     }
     // rotation
     for (const p of plan.pages) {

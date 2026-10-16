@@ -4,6 +4,8 @@ import { apply, bboxOf, type Matrix, type Pt, type Quad, type Rect, transformRec
 import { DEFAULT_STYLE, type FontFamily, type LineEnd, LINE_ENDS, type MarkupKind, type Reply, type ReviewStatus, type RGB } from "../../markup/model";
 import type { MarkupRecord } from "../types";
 import { PRIVATE_KEY } from "./annotWrite";
+import { readMeasure, safePageScale } from "./measureDict";
+import { isMeasure, type PageScale } from "../../markup/measure";
 
 const SKIP_SUBTYPES = new Set(["Popup", "Widget", "Link"]);
 
@@ -96,15 +98,18 @@ function kindFor(subtype: string, obj: mupdf.PDFObject, priv: Record<string, any
     case "Circle":
       return "ellipse";
     case "Line":
-      if (pk === "arrow" || pk === "line") return pk;
-      if (it === "LineDimension") return "foreign";
+      if (pk === "arrow" || pk === "line" || pk === "length") return pk;
+      if (it === "LineDimension") return "length";
       return it === "LineArrow" || /Arrow/.test(obj.get("LE").toString()) ? "arrow" : "line";
     case "PolyLine":
-      return it === "PolyLineDimension" ? "foreign" : "polyline";
+      if (pk === "angle" || pk === "polylength") return pk;
+      return it === "PolyLineDimension" ? "polylength" : "polyline";
     case "Polygon":
-      if (it === "PolygonDimension") return "foreign";
+      if (pk === "area" || pk === "perimeter") return pk;
+      if (it === "PolygonDimension") return "area";
       return name(dig(obj, "BE", "S")) === "C" || it === "PolygonCloud" ? "cloud" : "polygon";
     case "Ink":
+      if (pk === "count") return "count";
       return pk === "highlighter" || name(obj.get("BM")) === "Multiply" ? "highlighter" : "pen";
     case "FreeText":
       return it === "FreeTextCallout" ? "callout" : "textbox";
@@ -126,6 +131,7 @@ function kindFor(subtype: string, obj: mupdf.PDFObject, priv: Record<string, any
 /** Reads every markup on one page. `pageIndex` is the physical index. */
 export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupRecord[] {
   const ctm = page.getTransform() as Matrix;
+  const pageScale: PageScale | null = safePageScale(page);
   const pageObj = page.getObject();
   const annots = pageObj.get("Annots");
   if (!annots.isArray()) return [];
@@ -249,13 +255,23 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
       }
       case "line":
       case "arrow":
+      case "length":
         rec.points = pointsFrom(numArray(obj.get("L")), ctm).slice(0, 2);
         break;
       case "polyline":
       case "polygon":
       case "cloud":
+      case "polylength":
+      case "area":
+      case "perimeter":
+      case "angle":
         rec.points = pointsFrom(numArray(obj.get("Vertices")), ctm);
         break;
+      case "count": {
+        const ink = obj.get("InkList");
+        if (ink.isArray()) for (let i = 0; i < ink.length; i++) rec.points.push(...pointsFrom(numArray(ink.get(i)), ctm).slice(0, 1));
+        break;
+      }
       case "pen":
       case "highlighter": {
         const ink = obj.get("InkList");
@@ -291,8 +307,19 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
         } else rec.keepAppearance = true;
         break;
     }
-    if ((kind === "line" || kind === "arrow") && rec.points.length < 2) rec.kind = "foreign";
-    if ((kind === "polyline" || kind === "polygon" || kind === "cloud") && rec.points.length < 2) rec.kind = "foreign";
+    if ((kind === "line" || kind === "arrow" || kind === "length") && rec.points.length < 2) rec.kind = "foreign";
+    if ((kind === "polyline" || kind === "polygon" || kind === "cloud" || kind === "polylength" || kind === "area" || kind === "perimeter") && rec.points.length < 2) rec.kind = "foreign";
+    if (kind === "angle" && rec.points.length < 3) rec.kind = "foreign";
+    if (kind === "count" && rec.points.length < 1) rec.kind = "foreign";
+    if (isMeasure(rec.kind)) {
+      // /Contents holds the value; Drawset recomputes it, and keeps the comment from its private data
+      if (typeof priv.comment === "string") rec.contents = priv.comment;
+      else rec.contents = "";
+      if (typeof priv.fontSize === "number") rec.style.fontSize = priv.fontSize;
+      else rec.style.fontSize = 10;
+      const cut = Array.isArray(priv.cutouts) ? (priv.cutouts as unknown[]).filter(Array.isArray).map((c) => pointsFrom((c as unknown[]).map(Number), ctm)) : [];
+      rec.measure = { scale: readMeasure(obj.get("Measure")) ?? pageScale, cutouts: cut };
+    }
     if (rec.kind !== "foreign" && rec.points.length > 0 && kind !== "callout") rec.rect = bboxOf(rec.points);
     if (kind === "pen" || kind === "highlighter") rec.rect = bboxOf(rec.inks.flat());
     out.push(rec);

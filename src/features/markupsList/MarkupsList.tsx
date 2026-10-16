@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { markupBounds } from "../../markup/appearance";
-import { STATUSES, type ReviewStatus } from "../../markup/model";
+import { KIND_LABELS, STATUSES, type ReviewStatus } from "../../markup/model";
 import { scrollToPage, updateTab, useApp, type DocTab } from "../../state/store";
 import { saveAs } from "../../platform/host";
 import { cmd } from "../../app/commands";
-import { markupRows, rowsToCsv, sortRows, type SortKey } from "./csv";
+import { markupRows, quantitiesCsv, rowsToCsv, sortRows, type SortKey } from "./csv";
+import { formatTotal, totalsByType } from "../measure/MeasurePanel";
 
 const ROW_H = 26;
 const COLS: { key: SortKey; label: string; w: number }[] = [
@@ -15,6 +16,7 @@ const COLS: { key: SortKey; label: string; w: number }[] = [
   { key: "date", label: "Date", w: 120 },
   { key: "status", label: "Status", w: 90 },
   { key: "colour", label: "Colour", w: 80 },
+  { key: "measurement", label: "Measurement", w: 120 },
   { key: "comment", label: "Comment", w: 320 },
 ];
 
@@ -73,6 +75,11 @@ export function MarkupsList({ tab }: { tab: DocTab }) {
     updateTab(tab.key, (t) => ({ ...t, selection: sel }));
   };
 
+  const exportQuantities = async () => {
+    const csv = quantitiesCsv(rows);
+    await saveAs(tab.name.replace(/\.pdf$/i, "") + " quantities.csv", new TextEncoder().encode(csv), "CSV files", "csv", "text/csv");
+  };
+
   const exportCsv = async () => {
     const csv = rowsToCsv(rows);
     await saveAs(tab.name.replace(/\.pdf$/i, "") + " markups.csv", new TextEncoder().encode(csv), "CSV files", "csv", "text/csv");
@@ -91,6 +98,7 @@ export function MarkupsList({ tab }: { tab: DocTab }) {
   };
 
   const selCount = tab.selection.length;
+  const totals = useMemo(() => totalsByType(rows.map((r) => r.m)), [rows]);
   return (
     <div className="markups-list" style={{ height }} data-testid="markups-list">
       <div className="resize-handle" onPointerDown={startResize} />
@@ -124,6 +132,9 @@ export function MarkupsList({ tab }: { tab: DocTab }) {
         <button className="btn" onClick={exportCsv} data-testid="ml-export">
           Export CSV
         </button>
+        <button className="btn" onClick={exportQuantities} disabled={!totals.length} data-testid="ml-export-quantities">
+          Export quantities
+        </button>
         <button className="btn" onClick={() => useApp.setState({ bottomPanel: false })} aria-label="Close Markups List">
           ✕
         </button>
@@ -151,12 +162,23 @@ export function MarkupsList({ tab }: { tab: DocTab }) {
                 <span>
                   {r.colour && <i className="swatch" style={{ background: r.colour }} />} {r.colour}
                 </span>
+                <span className="num">{r.measurement}</span>
                 <span title={r.comment}>{r.comment}</span>
               </div>
             );
           })}
         </div>
       </div>
+      {totals.length > 0 && (
+        <div className="ml-totals" data-testid="ml-totals">
+          <strong>Totals</strong>
+          {totals.map((t) => (
+            <span key={t.kind + t.unit}>
+              {KIND_LABELS[t.kind]} ({t.count}): {formatTotal(t)}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

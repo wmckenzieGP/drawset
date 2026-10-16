@@ -1,5 +1,5 @@
 /** Pure editing operations on markups: move, scale, vertex edits and hit-testing. */
-import { calloutLeader, markupBounds } from "./appearance";
+import { buildAppearance, calloutLeader, markupBounds, textWidth } from "./appearance";
 import { bboxOf, dist, distToSegment, inflate, pointInPolygon, type Pt, type Quad, type Rect } from "./geometry";
 import { BOX_KINDS, nowIso, type Markup } from "./model";
 
@@ -21,6 +21,7 @@ export function translate(m: Markup, dx: number, dy: number): Markup {
     points: m.points.map(mv),
     inks: m.inks.map((s) => s.map(mv)),
     quads: m.quads.map((q) => q.map((v, i) => v + (i % 2 === 0 ? dx : dy)) as Quad),
+    measure: m.measure ? { ...m.measure, cutouts: m.measure.cutouts.map((c) => c.map(mv)) } : undefined,
     modified: nowIso(),
   };
 }
@@ -44,6 +45,7 @@ export function scaleBetween(m: Markup, from: Rect, to: Rect): Markup {
       const d = map([q[6], q[7]]);
       return [...a, ...b, ...c, ...d] as Quad;
     }),
+    measure: m.measure ? { ...m.measure, cutouts: m.measure.cutouts.map((c) => c.map(map)) } : undefined,
     modified: nowIso(),
   };
 }
@@ -64,6 +66,12 @@ export function vertexHandles(m: Markup): Pt[] {
     case "polygon":
     case "cloud":
     case "callout":
+    case "length":
+    case "polylength":
+    case "area":
+    case "perimeter":
+    case "count":
+    case "angle":
       return m.points;
     default:
       return [];
@@ -71,7 +79,7 @@ export function vertexHandles(m: Markup): Pt[] {
 }
 
 export function canResize(m: Markup): boolean {
-  return !["line", "arrow", "polyline", "polygon", "cloud", "highlight", "underline", "strikeout", "note"].includes(m.kind);
+  return !["line", "arrow", "polyline", "polygon", "cloud", "highlight", "underline", "strikeout", "note", "length", "polylength", "area", "perimeter", "count", "angle"].includes(m.kind);
 }
 
 /** Hit test in page space with tolerance `tol` (points). */
@@ -81,6 +89,19 @@ export function hitTest(m: Markup, p: Pt, tol: number): boolean {
   if (p[0] < b[0] || p[0] > b[2] || p[1] < b[1] || p[1] > b[3]) return false;
   const w = m.style.width / 2 + tol;
   switch (m.kind) {
+    case "count":
+      return m.points.some((q) => dist(q, p) <= Math.max(4, m.style.fontSize * 0.45) + tol) || pointInRect(p, captionBounds(m));
+    case "area":
+    case "perimeter":
+      if ((m.kind === "area" && m.style.fill) || pointInPolygon(p, m.points)) return true;
+      for (let i = 0; i < m.points.length; i++) if (distToSegment(p, m.points[i], m.points[(i + 1) % m.points.length]) <= w) return true;
+      return false;
+    case "length":
+    case "polylength":
+    case "angle":
+      if (pointInRect(p, captionBounds(m))) return true;
+      for (let i = 1; i < m.points.length; i++) if (distToSegment(p, m.points[i - 1], m.points[i]) <= w) return true;
+      return false;
     case "line":
     case "arrow":
     case "polyline":
@@ -130,6 +151,22 @@ export function hitTest(m: Markup, p: Pt, tol: number): boolean {
     default:
       return true;
   }
+}
+
+function pointInRect(p: Pt, r: Rect | null): boolean {
+  return !!r && p[0] >= r[0] && p[0] <= r[2] && p[1] >= r[1] && p[1] <= r[3];
+}
+
+/** Bounds of a measurement's caption text. */
+function captionBounds(m: Markup): Rect | null {
+  const ap = buildAppearance(m);
+  for (const op of ap.ops) {
+    if (op.t !== "text") continue;
+    const l = op.lines[0];
+    if (!l) continue;
+    return [l.x, l.y - op.size, l.x + textWidth(op.font, op.size, l.s), l.y + op.size * 0.3];
+  }
+  return null;
 }
 
 /** Clone a markup with a fresh id, offset, author and dates (paste/duplicate). */

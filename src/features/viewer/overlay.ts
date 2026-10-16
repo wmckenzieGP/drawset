@@ -125,11 +125,11 @@ export function drawOverlay(p: OverlayParams) {
         drawMarkup(normal, tab, page, { ...m, contents: "" }, scale * dpr);
         continue;
       }
-      const ctx = m.kind === "highlight" || m.kind === "highlighter" ? multiply : normal;
+      const ctx = m.kind === "highlight" || m.kind === "highlighter" || m.kind === "area" ? multiply : normal;
       drawMarkup(ctx, tab, page, m, scale * dpr);
     }
     if (preview && preview.page.entry.id === page.entry.id) {
-      const ctx = preview.m.kind === "highlight" || preview.m.kind === "highlighter" ? multiply : normal;
+      const ctx = preview.m.kind === "highlight" || preview.m.kind === "highlighter" || preview.m.kind === "area" ? multiply : normal;
       drawMarkup(ctx, tab, page, preview.m, scale * dpr);
     }
     // search hits

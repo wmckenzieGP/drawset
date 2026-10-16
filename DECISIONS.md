@@ -20,3 +20,12 @@ Markups from other people's files can contain text such as `=HYPERLINK(...)`, wh
 
 ## 12. Imported pages bring their markups, not form fields or page links
 MuPDF's `graftPage` copies page content but not /Annots, so annotations are grafted separately with /P rewritten. Widgets need the source file's AcroForm and links to its other pages would drag the whole source page tree along, so those two are left behind.
+
+## 13. How measurements are stored
+Length, polylength and area/perimeter use the ISO dimension intents (/LineDimension, /PolyLineDimension, /PolygonDimension) with a /Measure /RL copy of the page scale, so other editors list them as measurements. There is no standard intent for counts and angles: a count is an /Ink annotation with one single-point stroke per item, and an angle is a three-vertex /PolyLine with no intent; both carry their kind in /DrawsetData and draw correctly anywhere from their appearance streams. /Contents holds the displayed value (what other editors show), followed by the user's comment; the comment and area cutouts are kept in /DrawsetData. Values are recomputed from geometry and scale, never read back from /Contents.
+
+## 14. Page scale lives on the page, measurements follow it
+Each page has at most one scale (its full-page viewport). Setting a scale updates every measurement on that page in the same undo step. A measurement read from another editor uses its own /Measure; without one it uses the page's. Imperial feet-and-inches display (12'-6") is not offered; imperial scales show decimal feet or inches.
+
+## 15. Area fills multiply
+Area measurements default to a pale solid fill drawn with the Multiply blend mode, so the drawing stays visible underneath and captions stay readable (an opacity-based fill also fades the caption).

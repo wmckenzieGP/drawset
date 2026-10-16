@@ -1,5 +1,6 @@
 /** Markups List rows and CSV export (pure, unit-tested). */
 import { colourHex, formatDate, KIND_LABELS, type Markup } from "../../markup/model";
+import { isMeasure, measureValue, scaleLabel } from "../../markup/measure";
 import type { PageEntry } from "../../state/store";
 
 export interface Row {
@@ -16,6 +17,11 @@ export interface Row {
   comment: string;
   colour: string;
   locked: boolean;
+  /** Measured value as shown, "" for other markups. */
+  measurement: string;
+  /** Full-precision value and its unit (measurements only). */
+  value: number | null;
+  unit: string;
   m: Markup;
 }
 
@@ -38,19 +44,20 @@ export function markupRows(markups: Record<string, Markup>, pages: PageEntry[]):
       comment: m.contents,
       colour: colourHex(m.kind === "textbox" ? m.style.textColor : m.style.color),
       locked: m.locked,
+      ...(isMeasure(m.kind) ? (({ text, value, unit }) => ({ measurement: text, value, unit }))(measureValue(m)) : { measurement: "", value: null, unit: "" }),
       m,
     });
   }
   return rows;
 }
 
-export type SortKey = "page" | "type" | "subject" | "author" | "date" | "status" | "comment" | "colour";
+export type SortKey = "page" | "type" | "subject" | "author" | "date" | "status" | "comment" | "colour" | "measurement";
 
 /** Sorts names the way people expect (accents and case don't push entries to the end). */
 const collator = new Intl.Collator("en-AU", { sensitivity: "base", numeric: true });
 
 export function sortRows(rows: Row[], key: SortKey, dir: 1 | -1): Row[] {
-  const val = (r: Row): string | number => (key === "page" ? r.pageIndex : key === "date" ? r.modified : (r[key] as string));
+  const val = (r: Row): string | number => (key === "page" ? r.pageIndex : key === "measurement" ? (r.value ?? -Infinity) : key === "date" ? r.modified : (r[key] as string));
   return rows.slice().sort((a, b) => {
     const va = val(a);
     const vb = val(b);
@@ -70,12 +77,41 @@ function cell(v: string | number | boolean): string {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-export const CSV_COLUMNS = ["Page", "Page number", "Type", "Subject", "Author", "Date", "Status", "Comment", "Colour", "Locked", "ID"];
+export const CSV_COLUMNS = ["Page", "Page number", "Type", "Subject", "Author", "Date", "Status", "Comment", "Colour", "Locked", "Measurement", "ID"];
 
 export function rowsToCsv(rows: Row[]): string {
   const lines = [CSV_COLUMNS.join(",")];
-  for (const r of rows) lines.push([r.page, r.pageIndex + 1, r.type, r.subject, r.author, r.date, r.status, r.comment, r.colour, r.locked ? "Yes" : "No", r.id].map(cell).join(","));
+  for (const r of rows) lines.push([r.page, r.pageIndex + 1, r.type, r.subject, r.author, r.date, r.status, r.comment, r.colour, r.locked ? "Yes" : "No", r.measurement, r.id].map(cell).join(","));
   return "\uFEFF" + lines.join("\r\n") + "\r\n";
+}
+
+export const QUANTITY_COLUMNS = ["Page", "Page number", "Type", "Subject", "Quantity", "Unit", "Scale", "Comment", "ID"];
+
+/**
+ * Quantities for takeoff: one row per measurement with the unrounded value, then a total per type and unit.
+ * Values are plain numbers (no thousands separators) so spreadsheets read them as numbers.
+ */
+export function quantitiesCsv(rows: Row[]): string {
+  const ms = rows.filter((r) => r.value !== null);
+  const lines = [QUANTITY_COLUMNS.join(",")];
+  const totals = new Map<string, { type: string; unit: string; total: number; count: number }>();
+  for (const r of ms) {
+    const scale = r.m.measure?.scale;
+    lines.push([r.page, r.pageIndex + 1, r.type, r.subject, plain(r.value!), r.unit, scale ? scaleLabel(scale) : "", r.comment, r.id].map(cell).join(","));
+    const key = `${r.type}|${r.unit}`;
+    const t = totals.get(key) ?? { type: r.type, unit: r.unit, total: 0, count: 0 };
+    t.total += r.value!;
+    t.count++;
+    totals.set(key, t);
+  }
+  if (totals.size) lines.push("");
+  for (const t of totals.values()) lines.push(["Total", "", t.type, `${t.count} item${t.count === 1 ? "" : "s"}`, plain(t.total), t.unit, "", "", ""].map(cell).join(","));
+  return "\uFEFF" + lines.join("\r\n") + "\r\n";
+}
+
+/** Up to 10 significant decimals, no exponent, no separators. */
+function plain(v: number): string {
+  return String(Math.round(v * 1e10) / 1e10);
 }
 
 /** Minimal CSV parser (for tests and round trips). */

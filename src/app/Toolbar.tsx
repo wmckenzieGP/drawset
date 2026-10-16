@@ -35,6 +35,16 @@ const GROUPS: [ToolId, string, string][][] = [
     ["underline", "Underline (U)", "underline"],
     ["strikeout", "Strikethrough (K)", "strikeout"],
   ],
+  [
+    ["calibrate", "Calibrate: drag along a known dimension (Shift+K)", "calibrate"],
+    ["length", "Length (Shift+L)", "length"],
+    ["polylength", "Polylength (Shift+N): click points, double-click to finish", "polylength"],
+    ["area", "Area (Shift+A): click points, double-click to finish", "area"],
+    ["cutout", "Area cutout: select an area, then click the cutout's points", "cutout"],
+    ["perimeter", "Perimeter (Shift+P): click points, double-click to finish", "perimeter"],
+    ["count", "Count (Shift+C): click each item, Esc or double-click to finish", "count"],
+    ["angle", "Angle (Shift+G): click a point, the vertex, then another point", "angle"],
+  ],
 ];
 
 /** Reads an image file into the form markups store (PNG/JPEG only; other formats are converted to PNG). */

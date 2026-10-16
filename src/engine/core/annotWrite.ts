@@ -8,6 +8,8 @@ import { apply, inflate, invert, type Matrix, type Pt, transformRect } from "../
 import { buildAppearance, calloutLeader, type TextFont } from "../../markup/appearance";
 import { appearanceToPdf, FONT_RESOURCE } from "../../markup/pdfAppearance";
 import { colourHex, newId, type Markup, type RGB } from "../../markup/model";
+import { isMeasure, measureValue } from "../../markup/measure";
+import { measureObject } from "./measureDict";
 
 export const PRIVATE_KEY = "DrawsetData";
 
@@ -42,6 +44,16 @@ export function subtypeFor(m: Markup): mupdf.PDFAnnotationType {
     case "stamp":
     case "image":
       return "Stamp";
+    case "length":
+      return "Line";
+    case "polylength":
+    case "angle":
+      return "PolyLine";
+    case "area":
+    case "perimeter":
+      return "Polygon";
+    case "count":
+      return "Ink";
     case "foreign":
       return m.subtype as mupdf.PDFAnnotationType;
   }
@@ -91,7 +103,7 @@ function fontObject(doc: mupdf.PDFDocument, font: TextFont): mupdf.PDFObject {
 
 function nums(doc: mupdf.PDFDocument, values: number[]): mupdf.PDFObject {
   const arr = doc.newArray();
-  for (const v of values) arr.push(doc.newReal(Math.round(v * 10000) / 10000));
+  for (const v of values) arr.push(doc.newReal(Math.round(v * 1e6) / 1e6));
   return arr;
 }
 
@@ -122,12 +134,19 @@ function writeRectOnly(ctx: WriteContext, obj: mupdf.PDFObject, m: Markup) {
   obj.put("Rect", nums(ctx.doc, transformRect(m.rect, ctx.toUser)));
 }
 
+/** /Contents: the comment, or for measurements the value followed by the comment. */
+export function contentsFor(m: Markup): string {
+  if (!isMeasure(m.kind)) return m.contents;
+  const v = measureValue(m).text;
+  return m.contents ? `${v}\n${m.contents}` : v;
+}
+
 function putCommon(ctx: WriteContext, obj: mupdf.PDFObject, m: Markup) {
   const { doc } = ctx;
   obj.put("NM", doc.newString(m.id));
   obj.put("T", doc.newString(m.author || ctx.defaultAuthor));
   obj.put("Subj", doc.newString(m.subject));
-  obj.put("Contents", doc.newString(m.contents));
+  obj.put("Contents", doc.newString(contentsFor(m)));
   obj.put("CreationDate", doc.newString(pdfDate(m.created)));
   obj.put("M", doc.newString(pdfDate(m.modified)));
   let flags = obj.get("F").isNumber() ? obj.get("F").asNumber() : 0;
@@ -160,6 +179,13 @@ function putColour(ctx: WriteContext, obj: mupdf.PDFObject, key: string, c: RGB 
 
 function putPrivate(ctx: WriteContext, obj: mupdf.PDFObject, m: Markup) {
   const data: Record<string, unknown> = { v: 1, kind: m.kind };
+  if (isMeasure(m.kind)) {
+    // /Contents carries the measured value (as other editors show it); the user's comment lives here
+    data.comment = m.contents;
+    data.fontSize = m.style.fontSize;
+    data.font = m.style.fontFamily;
+    if (m.measure?.cutouts.length) data.cutouts = m.measure.cutouts.map((c) => userPts(ctx.toUser, c).map((v) => Math.round(v * 1e6) / 1e6));
+  }
   if (m.stampId) data.stampId = m.stampId;
   if (m.stampText) data.stampText = m.stampText;
   if (m.kind === "textbox" || m.kind === "callout") {
@@ -288,6 +314,38 @@ export function writeMarkup(ctx: WriteContext, annot: mupdf.PDFAnnotation, m: Ma
       obj.put("Name", doc.newName(m.image ? "Image" : "Draft"));
       if (m.image) obj.put("IT", doc.newName("StampImage"));
       break;
+    case "length":
+    case "polylength":
+    case "area":
+    case "perimeter":
+    case "angle": {
+      if (m.kind === "length") obj.put("L", nums(doc, userPts(T, m.points.slice(0, 2))));
+      else obj.put("Vertices", nums(doc, userPts(T, m.points)));
+      if (m.kind === "length" || m.kind === "polylength" || m.kind === "angle") {
+        const le = doc.newArray();
+        le.push(doc.newName(s.lineStart));
+        le.push(doc.newName(s.lineEnd));
+        obj.put("LE", le);
+      }
+      putColour(ctx, obj, "IC", s.fill);
+      putBorder(ctx, obj, m);
+      const it = m.kind === "length" ? "LineDimension" : m.kind === "polylength" ? "PolyLineDimension" : m.kind === "angle" ? null : "PolygonDimension";
+      if (it) obj.put("IT", doc.newName(it));
+      else obj.delete("IT");
+      if (it && m.measure?.scale) obj.put("Measure", measureObject(doc, m.measure.scale));
+      else obj.delete("Measure");
+      obj.delete("BE");
+      break;
+    }
+    case "count": {
+      const ink = doc.newArray();
+      for (const p of m.points) ink.push(nums(doc, userPts(T, [p])));
+      obj.put("InkList", ink);
+      putBorder(ctx, obj, m);
+      putColour(ctx, obj, "IC", s.fill);
+      if (m.measure?.scale) obj.put("Measure", measureObject(doc, m.measure.scale));
+      break;
+    }
   }
 
   // appearance stream (last, so MuPDF keeps it)

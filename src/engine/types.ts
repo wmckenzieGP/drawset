@@ -4,6 +4,7 @@
  */
 import type { Matrix, Pt, Quad, Rect } from "../markup/geometry";
 import type { Markup } from "../markup/model";
+import type { PageScale } from "../markup/measure";
 
 export interface PageInfo {
   /** Physical index in the engine document. */
@@ -15,6 +16,8 @@ export interface PageInfo {
   label: string;
   /** PDF user space → page space. */
   ctm: Matrix;
+  /** Calibrated scale from the page's viewports, if any. */
+  scale: PageScale | null;
 }
 
 export interface OutlineNode {
@@ -68,6 +71,8 @@ export interface SavePagePlan {
   index: number;
   /** Absolute /Rotate to write. */
   rotate: number;
+  /** New page scale (null removes it); omitted when unchanged. */
+  scale?: PageScale | null;
 }
 
 export interface SavePlan {

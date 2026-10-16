@@ -1,3 +1,5 @@
+import { MeasurePanel } from "../features/measure/MeasurePanel";
+import { CalibrateDialog, openCalibrateDialog } from "../features/measure/CalibrateDialog";
 import { useEffect, useState } from "react";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { activeTab, isDirty, useApp, type ToolId } from "../state/store";
@@ -76,6 +78,10 @@ const TOOL_MENU: { group: string; tools: [ToolId, string, string?][] }[] = [
   { group: "Freehand", tools: [["pen", "Pen", "F"], ["highlighter", "Highlighter", "G"]] },
   { group: "Text", tools: [["textbox", "Text box", "X"], ["callout", "Callout", "Q"], ["note", "Note", "O"], ["highlight", "Text highlight", "I"], ["underline", "Underline", "U"], ["strikeout", "Strikethrough", "K"]] },
   { group: "Stamps", tools: [["stamp", "Stamp", "S"], ["image", "Image"]] },
+  {
+    group: "Measure",
+    tools: [["calibrate", "Calibrate", "Shift+K"], ["length", "Length", "Shift+L"], ["polylength", "Polylength", "Shift+N"], ["area", "Area", "Shift+A"], ["cutout", "Area cutout"], ["perimeter", "Perimeter", "Shift+P"], ["count", "Count", "Shift+C"], ["angle", "Angle", "Shift+G"]],
+  },
 ];
 
 function MenuBar() {
@@ -154,6 +160,8 @@ function MenuBar() {
         <Sep />
         <Item label="Extract pages…" onSelect={() => openPageDialog("extract")} disabled={!has} />
         <Item label="Split document…" onSelect={() => openPageDialog("split")} disabled={!has} />
+        <Sep />
+        <Item label="Set page scale…" onSelect={openCalibrateDialog} disabled={!has} />
       </TopMenu>
     </div>
   );
@@ -301,6 +309,7 @@ export function App() {
         </section>
         {tab && rightPanel && (
           <aside className="panel right" aria-label="Properties">
+            <MeasurePanel tab={tab} />
             <PropertiesPanel tab={tab} />
           </aside>
         )}
@@ -309,6 +318,7 @@ export function App() {
       <Toast />
       <PageDialogs />
       <PrintDialog />
+      <CalibrateDialog />
       <PreferencesDialog />
       {dragOver && <div className="drop-hint">Drop PDF files to open them</div>}
     </div>

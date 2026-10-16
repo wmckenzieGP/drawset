@@ -63,6 +63,7 @@ textarea:focus {
 .app {
   display: grid;
   grid-template-rows: 30px 42px auto 1fr 24px;
+  grid-template-columns: minmax(0, 1fr);
   height: 100%;
 }
 .app.drag-over::after {
@@ -291,6 +292,7 @@ textarea:focus {
   width: 270px;
   border-left: 1px solid var(--line);
   overflow-y: auto;
+  flex-direction: column;
 }
 .panel-tabs {
   display: flex;
@@ -855,4 +857,46 @@ input.small {
     max-height: 100%;
     object-fit: contain;
   }
+}
+
+/* measurements */
+.measure-panel {
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+.panel-subtitle {
+  margin: 10px 0 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.measure-value {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  padding: 4px 0;
+}
+.field-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 6px 0;
+}
+.measure-panel > :not(.panel-title) {
+  margin-left: 12px;
+  margin-right: 12px;
+}
+.measure-panel > .btn {
+  margin-top: 6px;
+  margin-bottom: 10px;
+  align-self: flex-start;
+}
+.ml-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 4px 10px;
+  border-top: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
 }

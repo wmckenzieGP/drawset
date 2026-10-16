@@ -27,6 +27,16 @@ const TOOL_KEYS: Record<string, ToolId> = {
   s: "stamp",
 };
 
+const SHIFT_TOOL_KEYS: Record<string, ToolId> = {
+  k: "calibrate",
+  l: "length",
+  n: "polylength",
+  a: "area",
+  p: "perimeter",
+  c: "count",
+  g: "angle",
+};
+
 export function useShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -76,6 +86,7 @@ export function useShortcuts() {
         if (useApp.getState().tools.tool !== "select") setTool("select");
         return;
       }
+      if (e.shiftKey && SHIFT_TOOL_KEYS[k] && useApp.getState().tabs.length) return run(() => setTool(SHIFT_TOOL_KEYS[k]));
       const tool = TOOL_KEYS[k];
       if (tool && !e.shiftKey && useApp.getState().tabs.length) return run(() => setTool(tool));
     };

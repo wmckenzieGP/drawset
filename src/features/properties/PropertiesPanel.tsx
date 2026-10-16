@@ -4,12 +4,13 @@ import { textBoxHeight, textPadding } from "../../markup/appearance";
 import { commit, defaultStyleFor, useApp, withMarkups, type DocTab } from "../../state/store";
 import { cmd } from "../../app/commands";
 
-const FILL_KINDS = new Set<MarkupKind>(["rectangle", "ellipse", "polygon", "cloud", "textbox", "callout", "line", "arrow", "polyline"]);
-const WIDTH_KINDS = new Set<MarkupKind>(["rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "pen", "highlighter", "textbox", "callout"]);
-const DASH_KINDS = new Set<MarkupKind>(["rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "textbox", "callout"]);
-const END_KINDS = new Set<MarkupKind>(["line", "arrow", "polyline"]);
+const FILL_KINDS = new Set<MarkupKind>(["rectangle", "ellipse", "polygon", "cloud", "textbox", "callout", "line", "arrow", "polyline", "area", "count"]);
+const WIDTH_KINDS = new Set<MarkupKind>(["rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "pen", "highlighter", "textbox", "callout", "length", "polylength", "area", "perimeter", "angle"]);
+const DASH_KINDS = new Set<MarkupKind>(["rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "textbox", "callout", "length", "polylength", "area", "perimeter", "angle"]);
+const END_KINDS = new Set<MarkupKind>(["line", "arrow", "polyline", "length", "polylength"]);
+const MEASURE_KINDS = new Set<MarkupKind>(["length", "polylength", "area", "perimeter", "count", "angle"]);
 const TEXT_KINDS = new Set<MarkupKind>(["textbox", "callout"]);
-const COLOUR_KINDS = new Set<MarkupKind>(["rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "pen", "highlighter", "textbox", "callout", "note", "highlight", "underline", "strikeout", "stamp"]);
+const COLOUR_KINDS = new Set<MarkupKind>(["rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "pen", "highlighter", "textbox", "callout", "note", "highlight", "underline", "strikeout", "stamp", "length", "polylength", "area", "perimeter", "count", "angle"]);
 
 const DASHES: { label: string; value: number[] | null }[] = [
   { label: "Solid", value: null },
@@ -106,6 +107,13 @@ function StyleEditor({ kinds, style, onStyle }: { kinds: MarkupKind[]; style: Ma
         <label className="prop-row">
           <span>Cloud size</span>
           <input type="range" min={0.2} max={2} step={0.1} value={style.cloudIntensity} onChange={(e) => onStyle({ cloudIntensity: Number(e.target.value) }, "cloud")} />
+        </label>
+      )}
+      {all(MEASURE_KINDS) && (
+        <label className="prop-row">
+          <span>Caption size</span>
+          <input type="number" min={4} max={72} step={0.5} value={style.fontSize} onChange={(e) => onStyle({ fontSize: Math.max(4, Number(e.target.value)) }, "fontSize")} data-testid="prop-caption-size" />
+          <span className="prop-value">pt</span>
         </label>
       )}
       {all(TEXT_KINDS) && (

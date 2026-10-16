@@ -8,8 +8,9 @@ import { apply, normRect, snapAngle, snapSquare, type Pt, type Quad, type Rect, 
 import { markupBounds } from "../../markup/appearance";
 import { canResize, hitTest, scaleBetween, setVertex, translate, vertexHandles, withDerivedRect } from "../../markup/edit";
 import { KIND_LABELS, nowIso, type Markup, type MarkupKind } from "../../markup/model";
-import { commit, updateTab, useApp, withMarkups, type DocTab, type ToolId } from "../../state/store";
-import { boxMarkup, calloutAt, imageAt, inkMarkup, noteAt, stampAt, textBoxAt, textMarkup, vertexMarkup } from "./create";
+import { commit, flash, updateTab, useApp, withMarkups, type DocTab, type ToolId } from "../../state/store";
+import { boxMarkup, calloutAt, imageAt, inkMarkup, measureAt, noteAt, stampAt, textBoxAt, textMarkup, vertexMarkup } from "./create";
+import { isMeasure } from "../../markup/measure";
 import { pageAt, type Layout, type PageLayout } from "./layout";
 import { markupsInRect } from "./markupIndex";
 
@@ -36,11 +37,17 @@ type DragState =
   | { t: "resize"; page: PageLayout; original: Markup; handle: Handle; frame: Rect; current: Markup }
   | { t: "vertex"; page: PageLayout; original: Markup; index: number; current: Markup }
   | { t: "box"; kind: MarkupKind | "zoom"; page: PageLayout; a: Pt; b: Pt; moved: boolean }
-  | { t: "line"; kind: "line" | "arrow"; page: PageLayout; a: Pt; b: Pt }
+  | { t: "line"; kind: "line" | "arrow" | "length" | "calibrate"; page: PageLayout; a: Pt; b: Pt }
   | { t: "callout"; page: PageLayout; tip: Pt; b: Pt }
   | { t: "ink"; kind: "pen" | "highlighter"; page: PageLayout; pts: Pt[] }
-  | { t: "poly"; kind: "polyline" | "polygon" | "cloud"; page: PageLayout; pts: Pt[]; cursor: Pt; downAt: Pt | null }
+  | { t: "poly"; kind: PolyKind; page: PageLayout; pts: Pt[]; cursor: Pt; downAt: Pt | null }
   | { t: "textsel"; kind: "text" | "highlight" | "underline" | "strikeout"; page: PageLayout; a: Pt; b: Pt; quads: Quad[]; text: string; seq: number };
+
+type PolyKind = "polyline" | "polygon" | "cloud" | "polylength" | "area" | "perimeter" | "count" | "angle" | "cutout";
+const POLY_TOOLS = new Set<ToolId>(["polyline", "polygon", "cloud", "polylength", "area", "perimeter", "count", "angle", "cutout"]);
+
+/** Where calibration picks go: the dialog listens. */
+export const useCalibrationPick = create<{ pick: { pageId: string; a: Pt; b: Pt } | null }>(() => ({ pick: null }));
 
 const BOX_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "textbox", "stamp", "image", "zoom"]);
 const TEXT_TOOLS = new Set<ToolId>(["text", "highlight", "underline", "strikeout"]);
@@ -145,13 +152,17 @@ export class Controller {
         return { page: d.page, m: boxMarkup(d.kind, d.page.entry.id, d.a, d.b) };
       }
       case "line":
+        if (d.kind === "length") return { page: d.page, m: measureAt("length", d.page.entry, [d.a, d.b]) };
+        if (d.kind === "calibrate") return { page: d.page, m: { ...vertexMarkup("line", d.page.entry.id, [d.a, d.b]), style: { ...vertexMarkup("line", d.page.entry.id, [d.a, d.b]).style, color: [1, 0.3, 0], lineStart: "Butt", lineEnd: "Butt", dash: [4, 3] } } };
         return { page: d.page, m: vertexMarkup(d.kind, d.page.entry.id, [d.a, d.b]) };
       case "callout":
         return { page: d.page, m: calloutAt(d.page.entry.id, d.tip, d.b) };
       case "ink":
         return { page: d.page, m: inkMarkup(d.kind, d.page.entry.id, d.pts) };
       case "poly": {
-        const pts = [...d.pts, d.cursor];
+        const pts = d.kind === "count" ? d.pts : [...d.pts, d.cursor];
+        if (d.kind === "cutout") return { page: d.page, m: { ...vertexMarkup("polygon", d.page.entry.id, pts), style: { ...vertexMarkup("polygon", d.page.entry.id, pts).style, color: [0.1, 0.55, 0.25], dash: [4, 3], fill: null } } };
+        if (isMeasure(d.kind)) return { page: d.page, m: measureAt(d.kind, d.page.entry, pts) };
         return { page: d.page, m: vertexMarkup(d.kind, d.page.entry.id, pts) };
       }
       case "textsel":
@@ -209,6 +220,10 @@ export class Controller {
         this.drag.pts.push(p);
         this.drag.cursor = p;
         this.drag.downAt = p;
+        if (this.drag.kind === "angle" && this.drag.pts.length >= 3) {
+          this.finishPoly();
+          return;
+        }
       }
       this.host.redraw();
       return;
@@ -253,14 +268,18 @@ export class Controller {
     const p = this.toPage(page, c);
     if (BOX_TOOLS.has(tool)) {
       this.drag = { t: "box", kind: tool as MarkupKind | "zoom", page, a: p, b: p, moved: false };
-    } else if (tool === "line" || tool === "arrow") {
+    } else if (tool === "line" || tool === "arrow" || tool === "length" || tool === "calibrate") {
       this.drag = { t: "line", kind: tool, page, a: p, b: p };
     } else if (tool === "callout") {
       this.drag = { t: "callout", page, tip: p, b: p };
     } else if (tool === "pen" || tool === "highlighter") {
       this.drag = { t: "ink", kind: tool, page, pts: [p] };
-    } else if (tool === "polyline" || tool === "polygon" || tool === "cloud") {
-      this.drag = { t: "poly", kind: tool, page, pts: [p], cursor: p, downAt: p };
+    } else if (POLY_TOOLS.has(tool)) {
+      if (tool === "cutout" && !this.cutoutTarget(tab, page.entry.id)) {
+        flash("Select an area measurement on this page first, then draw the cutout inside it.", "error");
+        return;
+      }
+      this.drag = { t: "poly", kind: tool as PolyKind, page, pts: [p], cursor: p, downAt: p };
     } else if (tool === "note") {
       this.finishCreate(noteAt(page.entry.id, p));
     } else if (TEXT_TOOLS.has(tool)) {
@@ -456,7 +475,10 @@ export class Controller {
         break;
       }
       case "line":
-        if (dist(d.a, d.b) > this.tol(d.page, 3)) this.finishCreate(vertexMarkup(d.kind, d.page.entry.id, [d.a, d.b]));
+        if (dist(d.a, d.b) <= this.tol(d.page, 3)) break;
+        if (d.kind === "calibrate") useCalibrationPick.setState({ pick: { pageId: d.page.entry.id, a: d.a, b: d.b } });
+        else if (d.kind === "length") this.finishCreate(measureAt("length", d.page.entry, [d.a, d.b]));
+        else this.finishCreate(vertexMarkup(d.kind, d.page.entry.id, [d.a, d.b]));
         break;
       case "callout":
         this.finishCreate(calloutAt(d.page.entry.id, d.tip, dist(d.tip, d.b) > this.tol(d.page, 6) ? d.b : [d.tip[0] + 40, d.tip[1] - 40]));
@@ -505,12 +527,37 @@ export class Controller {
     this.drag = { t: "idle" };
     // a double-click adds the last point twice
     const pts = d.pts.filter((p, i) => i === 0 || dist(p, d.pts[i - 1]) > this.tol(d.page, 2));
-    const min = d.kind === "polyline" ? 2 : 3;
-    if (pts.length >= min) this.finishCreate(vertexMarkup(d.kind, d.page.entry.id, pts));
+    const min = d.kind === "polyline" || d.kind === "polylength" ? 2 : d.kind === "count" ? 1 : 3;
+    if (pts.length >= min) {
+      if (d.kind === "cutout") this.addCutout(d.page.entry.id, pts);
+      else if (isMeasure(d.kind)) this.finishCreate(measureAt(d.kind, d.page.entry, pts));
+      else this.finishCreate(vertexMarkup(d.kind, d.page.entry.id, pts));
+    }
     this.host.redraw();
   }
 
+  /** The selected area measurement on `pageId`, which a cutout is added to. */
+  private cutoutTarget(tab: DocTab, pageId: string): Markup | null {
+    const sel = tab.selection.map((id) => tab.state.markups[id]).filter((m) => m && m.kind === "area" && m.pageId === pageId && !m.locked);
+    return sel.length === 1 ? sel[0] : null;
+  }
+
+  private addCutout(pageId: string, pts: Pt[]) {
+    const tab = this.host.tab();
+    if (!tab) return;
+    const target = this.cutoutTarget(tab, pageId);
+    if (!target) return;
+    const measure = { scale: target.measure?.scale ?? null, cutouts: [...(target.measure?.cutouts ?? []), pts] };
+    commit(tab.key, "Add cutout", (s) => withMarkups(s, [{ ...target, measure, modified: nowIso() }]));
+    if (!useApp.getState().tools.reuse) useApp.setState((s) => ({ tools: { ...s.tools, tool: "select" } }));
+  }
+
   cancel() {
+    // Esc finishes a count (each click is already a counted item)
+    if (this.drag.t === "poly" && this.drag.kind === "count") {
+      this.finishPoly();
+      return true;
+    }
     if (this.drag.t !== "idle") {
       this.drag = { t: "idle" };
       this.host.redraw();

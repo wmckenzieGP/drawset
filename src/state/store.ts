@@ -6,6 +6,7 @@ import { create } from "zustand";
 import type { DocInfo, MarkupRecord, PageInfo, SearchHit } from "../engine/types";
 import type { Quad, Rect } from "../markup/geometry";
 import { DEFAULT_STYLE, type Markup, type MarkupKind, type MarkupStyle } from "../markup/model";
+import { isMeasure, type PageScale } from "../markup/measure";
 
 export type Rotation = 0 | 90 | 180 | 270;
 
@@ -16,6 +17,8 @@ export interface PageEntry {
   info: PageInfo;
   /** Extra rotation applied by the user (page operation), clockwise. */
   rotation: Rotation;
+  /** Page scale for measurements (starts as the file's; null when uncalibrated). */
+  scale: PageScale | null;
 }
 
 export interface DocState {
@@ -74,6 +77,8 @@ export type ToolId =
   | "pan"
   | "text"
   | "zoom"
+  | "calibrate"
+  | "cutout"
   | MarkupKind;
 
 export interface ToolState {
@@ -109,6 +114,12 @@ export const KIND_DEFAULTS: Partial<Record<MarkupKind, Partial<MarkupStyle>>> = 
   note: { color: [1, 0.82, 0.2] },
   stamp: { color: null },
   image: { color: null },
+  length: { color: [0.1, 0.35, 0.85], width: 1, lineStart: "Butt", lineEnd: "Butt", fontSize: 10 },
+  polylength: { color: [0.1, 0.35, 0.85], width: 1, lineStart: "None", lineEnd: "None", fontSize: 10 },
+  area: { color: [0.1, 0.5, 0.2], fill: [0.78, 0.93, 0.8], opacity: 1, width: 1, fontSize: 10 },
+  perimeter: { color: [0.55, 0.2, 0.75], width: 1.5, fontSize: 10 },
+  count: { color: [0.9, 0.1, 0.1], width: 1, fontSize: 10 },
+  angle: { color: [0.85, 0.45, 0.05], width: 1, fontSize: 10 },
 };
 
 export function defaultStyleFor(kind: MarkupKind): MarkupStyle {
@@ -148,7 +159,7 @@ export function updateTab(key: string, fn: (t: DocTab) => DocTab) {
 }
 
 export function pagesFromInfo(info: DocInfo): PageEntry[] {
-  return info.pages.map((p) => ({ id: newPageId(), src: p.index, info: p, rotation: 0 }));
+  return info.pages.map((p) => ({ id: newPageId(), src: p.index, info: p, rotation: 0, scale: p.scale }));
 }
 
 /** Converts records read from the engine into markups attached to page entries (by physical index). */
@@ -275,4 +286,16 @@ export function setView(key: string, view: Partial<ViewState>) {
 let scrollNonce = 1;
 export function scrollToPage(key: string, page: number, rect?: Rect) {
   updateTab(key, (t) => ({ ...t, currentPage: page, view: { ...t.view, scrollTo: { page, rect, nonce: scrollNonce++ } } }));
+}
+
+/** Sets the scale of the given pages; their measurements are recalculated in the same undo step. */
+export function setPageScale(key: string, pageIds: string[], scale: PageScale | null) {
+  const ids = new Set(pageIds);
+  commit(key, pageIds.length > 1 ? `Set scale on ${pageIds.length} pages` : "Set scale", (s) => {
+    const pages = s.pages.map((p) => (ids.has(p.id) ? { ...p, scale } : p));
+    const changed = Object.values(s.markups)
+      .filter((m) => ids.has(m.pageId) && isMeasure(m.kind))
+      .map((m) => ({ ...m, measure: { cutouts: m.measure?.cutouts ?? [], scale }, modified: new Date().toISOString() }));
+    return withMarkups({ ...s, pages }, changed);
+  });
 }

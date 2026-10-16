@@ -2,7 +2,7 @@
 import { stampDef, stampSize, textBoxHeight, textPadding } from "../../markup/appearance";
 import { bboxOf, normRect, type Pt, type Quad, type Rect } from "../../markup/geometry";
 import { KIND_LABELS, newId, nowIso, type Markup, type MarkupKind } from "../../markup/model";
-import { defaultStyleFor, useApp } from "../../state/store";
+import { defaultStyleFor, useApp, type PageEntry } from "../../state/store";
 
 export function toolStyle(kind: MarkupKind) {
   const s = useApp.getState().tools.defaults[kind];
@@ -121,4 +121,9 @@ export function imageAt(pageId: string, a: Pt, b: Pt | null): Markup | null {
     y0 = r[1];
   }
   return { ...m, rect: [x0, y0, x0 + w, y0 + h], image };
+}
+
+/** A measurement on `page` at the page's current scale. */
+export function measureAt(kind: MarkupKind, page: PageEntry, pts: Pt[]): Markup {
+  return { ...baseMarkup(kind, page.id), points: pts, rect: bboxOf(pts), measure: { scale: page.scale, cutouts: [] } };
 }

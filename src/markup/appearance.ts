@@ -6,6 +6,7 @@
 import { bboxOf, dist, inflate, signedArea, type Pt, type Quad, type Rect } from "./geometry";
 import { FONT_WIDTHS } from "./fontMetrics";
 import type { FontFamily, LineEnd, Markup, RGB } from "./model";
+import { measureValue } from "./measure";
 
 export type Seg = ["M", number, number] | ["L", number, number] | ["C", number, number, number, number, number, number] | ["Z"];
 
@@ -399,6 +400,108 @@ function calloutOps(m: Markup): DrawOp[] {
   return [...ops, ...textBoxOps(m)];
 }
 
+/** Caption text centred on `at`, sitting just above it. */
+function captionOp(m: Markup, at: Pt, text: string, above = true): TextOp {
+  const size = m.style.fontSize;
+  const w = textWidth(m.style.fontFamily, size, text);
+  const y = above ? at[1] - size * 0.35 : at[1] + size * ASCENT * 0.5;
+  return { t: "text", font: m.style.fontFamily, size, color: m.style.color ?? m.style.textColor, lines: [{ x: at[0] - w / 2, y, s: text }] };
+}
+
+/** Point halfway along a polyline. */
+function pathMidpoint(pts: readonly Pt[]): Pt {
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) total += dist(pts[i - 1], pts[i]);
+  let left = total / 2;
+  for (let i = 1; i < pts.length; i++) {
+    const d = dist(pts[i - 1], pts[i]);
+    if (left <= d && d > 0) return [pts[i - 1][0] + ((pts[i][0] - pts[i - 1][0]) * left) / d, pts[i - 1][1] + ((pts[i][1] - pts[i - 1][1]) * left) / d];
+    left -= d;
+  }
+  return pts[0] ?? [0, 0];
+}
+
+/** Area centroid of a polygon (vertex average when degenerate). */
+export function polygonCentroid(pts: readonly Pt[]): Pt {
+  let a = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    const q = pts[(i + 1) % pts.length];
+    const c = p[0] * q[1] - q[0] * p[1];
+    a += c;
+    cx += (p[0] + q[0]) * c;
+    cy += (p[1] + q[1]) * c;
+  }
+  if (Math.abs(a) < 1e-9) {
+    const n = pts.length || 1;
+    return [pts.reduce((s, p) => s + p[0], 0) / n, pts.reduce((s, p) => s + p[1], 0) / n];
+  }
+  return [cx / (3 * a), cy / (3 * a)];
+}
+
+function measureOps(m: Markup): DrawOp[] {
+  const s = m.style;
+  const stroke = s.color && s.width > 0 ? s.color : null;
+  const pts = m.points;
+  const ops: DrawOp[] = [];
+  const text = measureValue(m).text;
+  switch (m.kind) {
+    case "length":
+    case "polylength":
+      if (pts.length < 2) return ops;
+      if (stroke) {
+        ops.push({ t: "path", segs: polySegs(pts, false), fill: null, stroke, width: s.width, dash: s.dash, join: 1 });
+        ops.push(...lineEndOps(s.lineStart, pts[0], pts[1], s.width, stroke, s.fill));
+        ops.push(...lineEndOps(s.lineEnd, pts[pts.length - 1], pts[pts.length - 2], s.width, stroke, s.fill));
+      }
+      ops.push(captionOp(m, pathMidpoint(pts), text));
+      return ops;
+    case "area":
+    case "perimeter": {
+      if (pts.length < 2) return ops;
+      const segs = polySegs(pts, true);
+      const holes = m.kind === "area" ? (m.measure?.cutouts ?? []).filter((c) => c.length > 2) : [];
+      for (const h of holes) segs.push(...polySegs(h, true));
+      ops.push({ t: "path", segs, fill: m.kind === "area" ? s.fill : null, stroke, width: s.width, dash: s.dash, join: 1, evenOdd: true });
+      if (pts.length > 2) ops.push(captionOp(m, polygonCentroid(pts), text, false));
+      return ops;
+    }
+    case "count": {
+      const r = Math.max(4, s.fontSize * 0.45);
+      const fill = s.fill ?? s.color ?? [0.9, 0.1, 0.1];
+      for (const p of pts) ops.push({ t: "path", segs: ellipseSegs([p[0] - r, p[1] - r, p[0] + r, p[1] + r]), fill, stroke: stroke ?? fill, width: Math.min(s.width, 1), dash: null });
+      if (pts.length) ops.push(captionOp(m, [pts[pts.length - 1][0] + r + textWidth(s.fontFamily, s.fontSize, text) / 2 + 2, pts[pts.length - 1][1]], text, false));
+      return ops;
+    }
+    case "angle": {
+      if (pts.length < 2) return ops;
+      if (stroke) ops.push({ t: "path", segs: polySegs(pts, false), fill: null, stroke, width: s.width, dash: s.dash, join: 1 });
+      if (pts.length >= 3 && stroke) {
+        const [a, v, b] = pts;
+        const rad = Math.max(8, Math.min(dist(a, v), dist(b, v)) * 0.3);
+        const a0 = Math.atan2(a[1] - v[1], a[0] - v[0]);
+        let sweep = Math.atan2(b[1] - v[1], b[0] - v[0]) - a0;
+        while (sweep > Math.PI) sweep -= 2 * Math.PI;
+        while (sweep < -Math.PI) sweep += 2 * Math.PI;
+        const n = 16;
+        const arc: Seg[] = [];
+        for (let i = 0; i <= n; i++) {
+          const t = a0 + (sweep * i) / n;
+          arc.push([i === 0 ? "M" : "L", v[0] + rad * Math.cos(t), v[1] + rad * Math.sin(t)]);
+        }
+        ops.push({ t: "path", segs: arc, fill: null, stroke, width: Math.max(0.5, s.width * 0.75), dash: null });
+        const mid = a0 + sweep / 2;
+        const lab = rad + s.fontSize * 1.2;
+        ops.push(captionOp(m, [v[0] + lab * Math.cos(mid), v[1] + lab * Math.sin(mid)], text, false));
+      }
+      return ops;
+    }
+  }
+  return ops;
+}
+
 /** Markup appearance in page space. Foreign annotations and kept appearances return no ops. */
 export function buildAppearance(m: Markup): Appearance {
   const s = m.style;
@@ -459,6 +562,18 @@ export function buildAppearance(m: Markup): Appearance {
       break;
     case "image":
       if (!m.keepAppearance) ops.push({ t: "image", rect: m.rect });
+      break;
+    case "area":
+      // multiply lets the drawing show through a solid, pale fill while lines and caption stay crisp
+      blend = "Multiply";
+      ops.push(...measureOps(m));
+      break;
+    case "length":
+    case "polylength":
+    case "perimeter":
+    case "count":
+    case "angle":
+      ops.push(...measureOps(m));
       break;
     case "foreign":
       break;

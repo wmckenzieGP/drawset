@@ -1,6 +1,7 @@
 /** Opening, saving and closing documents: glue between the store, the engine and the host. */
 import { engine } from "../engine/client";
 import type { SavePlan } from "../engine/types";
+import { sameScale } from "../markup/measure";
 import { openPdfDialog, rememberRecentName, readPath, saveAs, saveInPlace, setDirty, type OpenedFile } from "../platform/host";
 import { renderCache } from "../features/viewer/renderCache";
 import { invalidateApBitmaps } from "../features/viewer/overlay";
@@ -63,7 +64,7 @@ export function buildPlan(t: DocTab, state: DocState = t.state, opts: { flatten?
     if (!state.markups[m.id] && m.objNum !== undefined) deletes.push(m.objNum);
   }
   return {
-    pages: pages.map((p) => ({ index: p.src, rotate: (p.info.rotate + p.rotation) % 360 })),
+    pages: pages.map((p) => ({ index: p.src, rotate: (p.info.rotate + p.rotation) % 360, ...(sameScale(p.scale, p.info.scale) ? {} : { scale: p.scale }) })),
     upserts,
     deletes,
     flatten: opts.flatten,

@@ -93,7 +93,7 @@ export async function insertBlankPage(key: string, at?: number) {
   const b = ref.info.bounds;
   // same size as the current page as displayed (its /Rotate applied)
   const info = await engine().addBlankPage(t.docId, b[2] - b[0], b[3] - b[1]);
-  const entry: PageEntry = { id: newPageId(), src: info.index, info: { ...info, label: "" }, rotation: 0 };
+  const entry: PageEntry = { id: newPageId(), src: info.index, info: { ...info, label: "" }, rotation: 0, scale: null };
   const index = at ?? t.currentPage + 1;
   commit(key, "Insert blank page", (s) => ({ ...s, pages: [...s.pages.slice(0, index), entry, ...s.pages.slice(index)] }));
   scrollToPage(key, index);
@@ -109,7 +109,7 @@ export async function insertFromFiles(key: string, files: OpenedFile[], at?: num
     useApp.setState({ busy: "Inserting pages…" });
     for (const f of files) {
       const res = await engine().importPages(t.docId, f.bytes);
-      const pages = res.pages.map((info) => ({ id: newPageId(), src: info.index, info, rotation: 0 as Rotation }));
+      const pages: PageEntry[] = res.pages.map((info) => ({ id: newPageId(), src: info.index, info, rotation: 0 as Rotation, scale: info.scale }));
       entries.push(...pages);
       markups = { ...markups, ...recordsToMarkups(res.markups, pages) };
     }

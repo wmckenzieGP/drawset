@@ -1,4 +1,5 @@
 import type { Pt, Quad, Rect } from "./geometry";
+import type { PageScale } from "./measure";
 
 /**
  * A markup as Drawset edits it. Coordinates are in page space: MuPDF's page coordinates for the page as
@@ -23,6 +24,12 @@ export type MarkupKind =
   | "strikeout"
   | "stamp"
   | "image"
+  | "length"
+  | "polylength"
+  | "area"
+  | "perimeter"
+  | "count"
+  | "angle"
   | "foreign";
 
 export type RGB = [number, number, number];
@@ -113,6 +120,14 @@ export interface Markup {
   replies: Reply[];
   /** Hidden from view (/F Hidden) — kept and preserved but not drawn. */
   hidden?: boolean;
+  /** Measurements: the scale they are measured at (the page's) and area cutouts. */
+  measure?: MeasureData;
+}
+
+export interface MeasureData {
+  scale: PageScale | null;
+  /** Holes subtracted from an area, page space. */
+  cutouts: Pt[][];
 }
 
 export const DEFAULT_STYLE: MarkupStyle = {
@@ -148,12 +163,18 @@ export const KIND_LABELS: Record<MarkupKind, string> = {
   strikeout: "Strikethrough",
   stamp: "Stamp",
   image: "Image",
+  length: "Length",
+  polylength: "Polylength",
+  area: "Area",
+  perimeter: "Perimeter",
+  count: "Count",
+  angle: "Angle",
   foreign: "Annotation",
 };
 
 /** Which kinds use the frame rect as their primary geometry. */
 export const BOX_KINDS: ReadonlySet<MarkupKind> = new Set(["rectangle", "ellipse", "textbox", "note", "stamp", "image", "foreign"]);
-export const VERTEX_KINDS: ReadonlySet<MarkupKind> = new Set(["line", "arrow", "polyline", "polygon", "cloud"]);
+export const VERTEX_KINDS: ReadonlySet<MarkupKind> = new Set(["line", "arrow", "polyline", "polygon", "cloud", "length", "polylength", "area", "perimeter", "count", "angle"]);
 export const TEXT_MARKUP_KINDS: ReadonlySet<MarkupKind> = new Set(["highlight", "underline", "strikeout"]);
 
 let idCounter = 0;
