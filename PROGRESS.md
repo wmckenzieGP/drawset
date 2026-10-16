@@ -1,8 +1,8 @@
 # Progress
 
-**Current item:** T1.18 Tier 1 release (waiting on S3 for the Windows build)
-**Last finished:** T1.17 print
-**Next up:** T3.4 forms (v0.1/v0.2 tags and installers wait on S3) (Tier 2 continues while S3 is blocked)
+**Current item:** none: the build is complete (tags and installers wait on S3)
+**Last finished:** T3.10 Tier 3 report and final report
+**Next up:** fix any problems William reports with Drawset files opened in Revu; tag v0.1 to v0.3 once the workflows are in place
 
 ## How to install
 Download `Drawset-Setup-<version>.exe` from the latest GitHub Release (https://github.com/wmckenziegp/drawset/releases) and run it. Windows SmartScreen may warn because the installer is not code-signed: choose "More info" then "Run anyway".
@@ -10,6 +10,7 @@ Download `Drawset-Setup-<version>.exe` from the latest GitHub Release (https://g
 ## Known issues
 - CI and release workflows are not installed yet: GitHub refused them because the build's access lacks the `workflow` permission. They are in `ci-workflows/` for William to copy into `.github/workflows/`.
 - Pages inserted from another file bring their markups but not form fields or links to other pages in that file.
+- OCR reads English only.
 
 ## Log
 - S1: Saved SPEC.md unchanged; wrote CLAUDE.md, PLAN.md, DECISIONS.md and this file.
@@ -46,3 +47,10 @@ All Tier 2 items are built and tested: calibration, six measurement types with q
 - T3.7: Protected files open after asking for their password (wrong passwords are refused and asked again). File > Security… (or the status-bar badge) sets an open password and/or restrictions with a permissions password (printing, copying, markups, forms, page assembly, other changes), written with 256-bit AES on the next save, which is then a full rewrite; Remove security writes an unencrypted file. Both are undoable until saved. Files whose permissions forbid a change ask for the permissions password before saving it; form filling and markups follow their own permissions. The engine keeps the password in the worker only, to reopen the file after saving. Also replaced window.prompt (unsupported in Electron) with an in-app prompt, fixing renaming in the Tool Chest on the desktop. Tests: open, wrong and owner passwords; every permission bit checked against MuPDF; set, keep (incremental), and remove security read by MuPDF and pdf.js, including pdf.js permission flags; rights checks; E2E opens secured.pdf, unlocks to save, removes and sets security.
 - T3.8: Every 60 s each document with unsaved changes is journaled (only when its state changed since the last journal): markups (images as base64), page order, rotation, scales, labels, bookmarks, form values and header/footer settings, with the file's SHA-256. Desktop journals are JSON files in the app's data folder; the browser build uses IndexedDB. Saving or closing a document removes its journal, and choosing "Close without saving" when quitting clears them all. At the next start, leftover journals are listed; Restore reopens the file (or asks for it in the browser), checks it is the same file, and applies the changes as one undo step, keeping untouched markups as they were so the save only writes real changes. Passwords and pages inserted from other files are not journaled, and the user is told. Tests: journal round trip including images, replies and measurements; restored state equals the original; unchanged markups keep identity; journals dropped once saved; E2E draws, "crashes" (reload), restores and saves.
 - T3.9: Tools > Recognise text (OCR)… reads all pages, the current page or a range (skipping pages that already have text) with tesseract.js on this computer, with progress and cancel. Each page is rendered at 300 dpi in grey; the words are added as invisible text (render mode 3) in a tagged content stream of its own, sized and stretched to each word's box on its baseline, so search, selection and copying line up with the scan. One undo step; the scan is never changed. The worker, cores and English data ship with the app (about 14 MB); nothing is downloaded. Tests: notes and title block recognised and found by MuPDF and pdf.js within a few points of where they are printed, render unchanged, rotated pages, replace and undo; E2E recognises, searches, undoes, saves, and checks no request leaves the app.
+- T3.10: full suite green (109 unit, 32 browser), seven new screenshots (compare, split view, forms, header and footer, link, security, OCR), Tier 3 and final reports. The v0.3 tag and installer wait for the workflows (S3). Search results are now cleared when headers, footers or recognised text change the page text, so they never point at text that is gone.
+
+## Tier 3 report (16/10/2026)
+All Tier 3 items are built and tested: compare, split view, page labels from the title block, forms, headers and footers, hyperlinks, security, crash recovery and OCR. Typecheck and lint clean; 109 unit and 32 browser tests pass. The v0.3 tag and installer wait on the workflow files (S3). Full report: docs/TIER-REPORTS.md.
+
+## Final report (16/10/2026)
+Drawset is built to the end of PLAN.md: Tier 1 (viewing, 17 markup types, editing, incremental save that keeps other editors' keys, Markups List, page operations, print), Tier 2 (calibration, measurements and quantities, erase and redact, overlay, Tool Chest, replies, snapping) and Tier 3 (above). Everything runs on this computer with no uploads or telemetry, and no Bluebeam or Revu names or artwork are used. The one open item is S3: the CI and release workflows in ci-workflows/ need to be copied into .github/workflows/ by William, after which the Windows installer is built and v0.1, v0.2 and v0.3 can be tagged. Nothing has been checked in Revu itself; problems found there come first, before anything new.

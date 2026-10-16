@@ -80,3 +80,76 @@ test("overlay, Tool Chest and replies", async ({ page }) => {
   await page.waitForTimeout(1500);
   await page.screenshot({ path: "docs/screenshots/overlay.png" });
 });
+
+test("Tier 3: compare, split view, forms, headers, links, security, OCR", async ({ page }) => {
+  test.setTimeout(180000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto("/");
+  await openFixture(page, "calibration.pdf");
+  await waitForPage(page);
+  await openFixture(page, "calibration-rev.pdf");
+  await waitForPage(page);
+  await page.getByTestId("menu-tools").click();
+  await page.getByRole("menuitem", { name: "Compare documents…" }).click();
+  await page.getByTestId("overlay-cloud-all").click();
+  await page.waitForTimeout(800);
+  await page.keyboard.press("Escape");
+  await page.getByTestId("tb-markups-list").click();
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: "docs/screenshots/compare.png" });
+  await page.getByTestId("tb-markups-list").click();
+
+  await page.getByTestId("menu-view").click();
+  await page.getByRole("menuitem", { name: "Split view" }).click();
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: "docs/screenshots/split-view.png" });
+  await page.getByTestId("menu-view").click();
+  await page.getByRole("menuitem", { name: "Close split view" }).click();
+
+  await openFixture(page, "form.pdf");
+  await waitForPage(page);
+  await page.getByTestId("panel-forms").click();
+  await page.getByTestId("form-input").first().fill("Library fit-out");
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: "docs/screenshots/forms.png" });
+
+  await openFixture(page, "set-200.pdf");
+  await waitForPage(page);
+  await page.getByTestId("menu-page").click();
+  await page.getByRole("menuitem", { name: "Headers, footers and watermark…" }).click();
+  await page.getByTestId("hf-bc").fill("Sheet {page} of {pages}");
+  await page.getByTestId("hf-tr").fill("{label}");
+  await page.getByTestId("hf-wm-on").check();
+  await page.getByTestId("hf-wm-text").fill("FOR REVIEW");
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: "docs/screenshots/header-footer.png" });
+  await page.getByTestId("hf-apply").click();
+  await page.waitForTimeout(1200);
+  await page.getByTestId("tool-link").click();
+  await drag(page, await pagePoint(page, 0.1, 0.1), await pagePoint(page, 0.3, 0.2));
+  await page.getByTestId("link-type-page").check();
+  await page.getByTestId("link-page").fill("42");
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: "docs/screenshots/link.png" });
+  await page.getByTestId("link-ok").click();
+
+  await page.getByTestId("menu-file").click();
+  await page.getByRole("menuitem", { name: "Security…" }).click();
+  await page.getByTestId("sec-open").check();
+  await page.getByTestId("sec-restrict").check();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: "docs/screenshots/security.png" });
+  await page.keyboard.press("Escape");
+
+  await openFixture(page, "scanned-text.pdf");
+  await waitForPage(page);
+  await page.getByTestId("menu-tools").click();
+  await page.getByRole("menuitem", { name: "Recognise text (OCR)…" }).click();
+  await page.getByTestId("ocr-start").click();
+  await page.getByTestId("ocr-dialog").waitFor({ state: "hidden", timeout: 90000 });
+  await page.getByTestId("panel-search").click();
+  await page.getByTestId("search-input").fill("DIMENSIONS");
+  await page.getByTestId("search-input").press("Enter");
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: "docs/screenshots/ocr.png" });
+});

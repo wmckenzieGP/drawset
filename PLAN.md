@@ -48,4 +48,4 @@ Each item is about 2 hours or less. Tick `[x]` when its acceptance criteria pass
 - [x] T3.7 Security: add or remove an open password and permission restrictions. *Accept:* protected files open with their password; new passwords and permissions (AES-256) are honoured by MuPDF and pdf.js; restricted files need the permissions password before Drawset changes them; security can be removed.
 - [x] T3.8 Crash recovery: journal unsaved markups every 60 s and offer to restore after a crash. *Accept:* after an unclean exit the next start lists each document with unsaved changes; restoring reopens the file and brings back markups, page order, rotation, labels, bookmarks, form values and headers as one undo step; saving or closing on purpose removes the journal.
 - [x] T3.9 OCR: invisible text layer for scanned pages with tesseract.js. Accept: a scanned sheet's notes are found by search in Drawset, MuPDF and pdf.js at the printed position; the page renders unchanged; undoable; works offline.
-- [ ] T3.10 Tier 3 release v0.3 and final report.
+- [x] T3.10 Tier 3 release v0.3 and final report. (Tag and installer wait on the workflows, S3.)

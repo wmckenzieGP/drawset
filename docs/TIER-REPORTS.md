@@ -1,5 +1,59 @@
 # Tier reports
 
+## Tier 3: documents and safety (v0.3), 16 October 2026
+
+**State:** all Tier 3 features are built and tested (T3.1 to T3.9). This completes the build: every
+item in PLAN.md is done except the Windows installer and the v0.1 to v0.3 tags, which wait for the
+CI and release workflows (see "Waiting on William").
+
+### What is new
+- **Compare** (T3.1): Tools > Compare documents clouds each changed area on the newer revision, as
+  ordinary markups (subject "Compare") in one undo step.
+- **Split view** (T3.2): two files, or the same file twice, side by side with page, position and zoom
+  kept in step; syncing can be turned off.
+- **Page labels from the title block** (T3.3): draw a box around the sheet number once and every
+  page is labelled from it, with a preview; bookmarks can be rebuilt from the labels.
+- **Forms** (T3.4): a Forms panel for text, check box, list and radio fields, also clickable on the
+  page; undoable; File > Flatten form fields (with confirmation).
+- **Headers, footers and watermarks** (T3.5): six positions with {page}, {pages}, {label}, {file}
+  and {date}, plus a diagonal watermark, written as separate tagged content streams that can be
+  changed or removed later.
+- **Hyperlinks** (T3.6): a Link tool for pages, web or email addresses and other files; links from
+  other editors are read and edited in place; Back and Forward.
+- **Security** (T3.7): opens protected files; sets or removes an open password and restrictions
+  with 256-bit AES; restricted files ask for the permissions password before saving changes.
+- **Crash recovery** (T3.8): unsaved changes are journaled every 60 seconds on this computer and
+  offered for restore at the next start.
+- **Text recognition** (T3.9): Tools > Recognise text (OCR) adds an invisible, searchable text layer
+  to scanned pages with tesseract.js, offline, without changing the scan.
+
+### Tests at the end of Tier 3
+- Typecheck and lint clean; the desktop app bundles.
+- 109 unit tests in 22 files: all pass. Every feature that writes a PDF is reopened in MuPDF and
+  checked independently with pdf.js (values, positions, text extraction and renders).
+- 32 browser tests: all pass (3 more are screenshot runs, skipped unless requested). The OCR test
+  also checks that no request leaves the app.
+
+### Screenshots
+`docs/screenshots/`: `compare.png`, `split-view.png`, `forms.png`, `header-footer.png`, `link.png`,
+`security.png`, `ocr.png` (new), plus the Tier 1 and 2 screenshots.
+
+### Known issues and limits
+- OCR reads English only and skips pages that already have text unless told otherwise; it
+  adds about 14 MB to the installer.
+- Pages inserted from another file bring their markups but not form fields or links to other
+  pages in that file.
+- Passwords cannot contain commas (a MuPDF save-option limit; DECISIONS.md 25).
+- Nothing has been checked in Revu itself (the build has no Windows machine or Revu licence). The
+  files follow ISO 32000-2 and are checked with two independent readers; the spec asks for any
+  problems William finds in Revu to be fixed before anything new is added.
+
+### Waiting on William
+- Add `ci-workflows/ci.yml` and `ci-workflows/release.yml` to `.github/workflows/` (the build's
+  GitHub access lacks the `workflow` permission). The release workflow then builds the Windows
+  installer, which completes T1.3, and the v0.1, v0.2 and v0.3 tags can be made with the installer
+  attached to each Release.
+
 ## Tier 2: takeoff and review (v0.2), 16 October 2026
 
 **State:** all Tier 2 features are built and tested (T2.1 to T2.8). The v0.1 and v0.2 tags and the
