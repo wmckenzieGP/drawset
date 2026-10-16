@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld("drawsetHost", {
   pendingPaths: (): Promise<string[]> => ipcRenderer.invoke("pending-paths"),
   setDirty: (dirty: boolean) => ipcRenderer.send("set-dirty", dirty),
   appVersion: (): Promise<string> => ipcRenderer.invoke("app-version"),
+  journalWrite: (id: string, json: string): Promise<void> => ipcRenderer.invoke("journal-write", id, json),
+  journalList: (): Promise<string[]> => ipcRenderer.invoke("journal-list"),
+  journalRemove: (id: string): Promise<void> => ipcRenderer.invoke("journal-remove", id),
   onOpenPaths: (cb: (paths: string[]) => void) => {
     ipcRenderer.on("open-paths", (_e, paths: string[]) => cb(paths));
   },

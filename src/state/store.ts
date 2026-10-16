@@ -86,6 +86,8 @@ export interface DocTab {
   textSelection: TextSelection | null;
   /** The file's form fields (values as saved); null until read or when there is no form. */
   fields: FormField[] | null;
+  /** SHA-256 of the file as opened or last saved (for crash recovery). */
+  fingerprint?: string;
   /** Field the Forms panel should show and focus. */
   formFocus: { name: string; nonce: number } | null;
 }

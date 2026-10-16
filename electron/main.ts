@@ -15,6 +15,9 @@ protocol.registerSchemesAsPrivileged([
 const distDir = path.join(__dirname, "..", "dist");
 const recentFile = () => path.join(app.getPath("userData"), "recent.json");
 const MAX_RECENT = 15;
+/** Crash-recovery journals: one JSON file per open document with unsaved changes. */
+const recoveryDir = () => path.join(app.getPath("userData"), "recovery");
+const journalPath = (id: string) => path.join(recoveryDir(), `${id.replace(/[^a-zA-Z0-9_-]/g, "_")}.json`);
 
 let mainWindow: BrowserWindow | null = null;
 let pendingPaths: string[] = [];
@@ -78,7 +81,7 @@ function createWindow() {
   mainWindow.setMenu(null);
   mainWindow.loadURL(`${APP_SCHEME}://drawset/index.html`);
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/.test(url)) shell.openExternal(url);
+    if (/^(https?|mailto):/.test(url)) shell.openExternal(url);
     return { action: "deny" };
   });
   mainWindow.webContents.on("before-input-event", (_e, input) => {
@@ -95,6 +98,8 @@ function createWindow() {
       message: "Some documents have unsaved changes. Close Drawset anyway?",
     });
     if (choice !== 0) e.preventDefault();
+    // closing without saving on purpose: nothing to recover next time
+    else fs.rm(recoveryDir(), { recursive: true, force: true }).catch(() => undefined);
   });
   mainWindow.on("closed", () => (mainWindow = null));
 }
@@ -170,6 +175,17 @@ if (!gotLock) {
       dirty = value;
     });
     ipcMain.handle("app-version", () => app.getVersion());
+    ipcMain.handle("journal-write", async (_e, id: string, json: string) => {
+      await fs.mkdir(recoveryDir(), { recursive: true });
+      await writeAtomic(journalPath(id), new TextEncoder().encode(json));
+    });
+    ipcMain.handle("journal-list", async () => {
+      const names = await fs.readdir(recoveryDir()).catch(() => [] as string[]);
+      const out: string[] = [];
+      for (const n of names) if (n.endsWith(".json")) out.push(await fs.readFile(path.join(recoveryDir(), n), "utf8").catch(() => ""));
+      return out.filter(Boolean);
+    });
+    ipcMain.handle("journal-remove", (_e, id: string) => fs.rm(journalPath(id), { force: true }));
 
     createWindow();
   });

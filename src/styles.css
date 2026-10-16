@@ -1323,3 +1323,22 @@ input.small {
   padding: 0;
   font: inherit;
 }
+
+/* recovery */
+.recovery-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+}
+.recovery-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.recovery-list li > div {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

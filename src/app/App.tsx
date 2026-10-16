@@ -4,6 +4,7 @@ import { FormsPanel } from "../features/forms/FormsPanel";
 import { flattenForms } from "../features/forms/forms";
 import { ToolChestPanel, addSelectionToChest } from "../features/toolchest/ToolChestPanel";
 import { AskDialog } from "./AskDialog";
+import { RecoveryDialog } from "../features/recovery/RecoveryDialog";
 import { SecurityDialog, openSecurity } from "../features/security/SecurityDialog";
 import { LinkDialog } from "../features/links/LinkDialog";
 import { goBack, goForward } from "../features/links/navigate";
@@ -381,6 +382,7 @@ export function App() {
       <LinkDialog />
       <AskDialog />
       <SecurityDialog />
+      <RecoveryDialog />
       <PreferencesDialog />
       {dragOver && <div className="drop-hint">Drop PDF files to open them</div>}
     </div>

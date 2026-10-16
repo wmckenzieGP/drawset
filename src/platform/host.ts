@@ -20,6 +20,9 @@ interface DesktopHost {
   setDirty(dirty: boolean): void;
   appVersion(): Promise<string>;
   onOpenPaths(cb: (paths: string[]) => void): void;
+  journalWrite(id: string, json: string): Promise<void>;
+  journalList(): Promise<string[]>;
+  journalRemove(id: string): Promise<void>;
 }
 
 declare global {

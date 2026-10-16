@@ -2,6 +2,7 @@
 import { engine } from "../engine/client";
 import type { Decoration, DocInfo, SavePlan } from "../engine/types";
 import { askText } from "../app/AskDialog";
+import { dropJournal, sha256Hex } from "../features/recovery/journal";
 import { currentSpec, decorationsFor, specJson } from "../features/headerFooter/hf";
 import { sameScale } from "../markup/measure";
 import { openPdfDialog, rememberRecentName, readPath, saveAs, saveInPlace, setDirty, type OpenedFile } from "../platform/host";
@@ -19,12 +20,15 @@ export async function openFiles(files: OpenedFile[]) {
     }
     try {
       useApp.setState({ busy: `Opening ${f.name}…` });
+      // fingerprint first: the bytes are handed to the engine
+      const fingerprint = await sha256Hex(f.bytes).catch(() => undefined);
       const info = await openWithPassword(f);
       if (!info) {
         useApp.setState({ busy: null });
         continue;
       }
       const key = addTab(info, f.name, f.path);
+      updateTab(key, (t) => ({ ...t, fingerprint }));
       rememberRecentName(f.name);
       if (info.hasForm) loadFields(key);
       useApp.setState({ busy: null });
@@ -279,6 +283,7 @@ export async function saveTab(key: string, opts: SaveOptions = {}): Promise<bool
     appliedFields.delete(t.docId);
     appliedDecor.delete(t.docId);
     appliedSpec.delete(t.docId);
+    const fingerprint = await sha256Hex(res.bytes).catch(() => undefined);
     const path = await saveInPlace(t.path, t.name, res.bytes);
     const pages = pagesFromInfo(res.info);
     const state: DocState = { pages, markups: recordsToMarkups(res.markups, pages) };
@@ -296,7 +301,9 @@ export async function saveTab(key: string, opts: SaveOptions = {}): Promise<bool
       search: { ...x.search, hits: [], current: -1, done: false },
       textSelection: null,
       fields,
+      fingerprint,
     }));
+    void dropJournal(t);
     flash(opts.flattenForms ? "Form fields flattened and saved." : opts.flatten ? "Markups flattened and saved." : opts.applyRedactions ? "Redactions applied and saved." : `Saved ${t.name}.`);
     return true;
   } catch (e) {
@@ -345,6 +352,7 @@ export async function closeTab(key: string, force = false): Promise<boolean> {
   appliedFields.delete(t.docId);
   appliedDecor.delete(t.docId);
   appliedSpec.delete(t.docId);
+  void dropJournal(t);
   await engine().close(t.docId);
   return true;
 }
