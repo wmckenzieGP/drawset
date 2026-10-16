@@ -46,18 +46,26 @@ export function markupRows(markups: Record<string, Markup>, pages: PageEntry[]):
 
 export type SortKey = "page" | "type" | "subject" | "author" | "date" | "status" | "comment" | "colour";
 
+/** Sorts names the way people expect (accents and case don't push entries to the end). */
+const collator = new Intl.Collator("en-AU", { sensitivity: "base", numeric: true });
+
 export function sortRows(rows: Row[], key: SortKey, dir: 1 | -1): Row[] {
-  const val = (r: Row): string | number => (key === "page" ? r.pageIndex : key === "date" ? r.modified : (r[key] as string).toLowerCase());
+  const val = (r: Row): string | number => (key === "page" ? r.pageIndex : key === "date" ? r.modified : (r[key] as string));
   return rows.slice().sort((a, b) => {
     const va = val(a);
     const vb = val(b);
-    const c = va < vb ? -1 : va > vb ? 1 : 0;
+    const c = typeof va === "number" || key === "date" ? (va < vb ? -1 : va > vb ? 1 : 0) : collator.compare(va, vb as string);
     return c !== 0 ? c * dir : a.pageIndex - b.pageIndex || a.modified.localeCompare(b.modified);
   });
 }
 
+/** Text that spreadsheets would run as a formula gets a leading apostrophe (shown as plain text). */
+export function guardFormula(s: string): string {
+  return /^[=+\-@\t\r]/.test(s) && !/^[+-]?\d+(\.\d+)?$/.test(s) ? `'${s}` : s;
+}
+
 function cell(v: string | number | boolean): string {
-  const s = String(v);
+  const s = typeof v === "string" ? guardFormula(v) : String(v);
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

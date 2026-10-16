@@ -66,6 +66,16 @@ function parseDA(da: string): { font: FontFamily; size: number; color: RGB } {
   return { font: family, size: size > 0 ? size : 12, color };
 }
 
+/** Follows a chain of dictionary keys; MuPDF throws on get() of a missing (null) object. */
+export function dig(obj: mupdf.PDFObject, ...keys: string[]): mupdf.PDFObject {
+  let o = obj;
+  for (const k of keys) {
+    if (!o.isDictionary() && !o.isStream()) return mupdf.PDFObject.Null;
+    o = o.get(k);
+  }
+  return o;
+}
+
 function readPrivate(obj: mupdf.PDFObject): Record<string, any> {
   const raw = obj.get(PRIVATE_KEY);
   if (!raw.isString()) return {};
@@ -93,7 +103,7 @@ function kindFor(subtype: string, obj: mupdf.PDFObject, priv: Record<string, any
       return it === "PolyLineDimension" ? "foreign" : "polyline";
     case "Polygon":
       if (it === "PolygonDimension") return "foreign";
-      return name(obj.get("BE").get("S")) === "C" || it === "PolygonCloud" ? "cloud" : "polygon";
+      return name(dig(obj, "BE", "S")) === "C" || it === "PolygonCloud" ? "cloud" : "polygon";
     case "Ink":
       return pk === "highlighter" || name(obj.get("BM")) === "Multiply" ? "highlighter" : "pen";
     case "FreeText":
@@ -107,7 +117,7 @@ function kindFor(subtype: string, obj: mupdf.PDFObject, priv: Record<string, any
     case "StrikeOut":
       return "strikeout";
     case "Stamp":
-      return "stamp";
+      return pk === "image" || it === "StampImage" ? "image" : "stamp";
     default:
       return "foreign";
   }
@@ -194,7 +204,7 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
       dash: dashArr.length ? dashArr : null,
       lineStart: lineEnd(leNames[0]),
       lineEnd: lineEnd(leNames[1]),
-      cloudIntensity: obj.get("BE").isDictionary() && obj.get("BE").get("I").isNumber() ? obj.get("BE").get("I").asNumber() : 1,
+      cloudIntensity: dig(obj, "BE", "I").isNumber() ? dig(obj, "BE", "I").asNumber() : 1,
       fontFamily: (priv.font as FontFamily) ?? da.font,
       fontSize: da.size,
       textColor: da.color,

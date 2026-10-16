@@ -77,8 +77,13 @@ export class WorkerEngine implements PdfEngine {
   }
 }
 
-let instance: WorkerEngine | null = null;
-export function engine(): WorkerEngine {
+let instance: PdfEngine | null = null;
+export function engine(): PdfEngine {
   if (!instance) instance = new WorkerEngine();
   return instance;
+}
+
+/** Replaces the engine (tests run the same core in-process). */
+export function setEngine(e: PdfEngine) {
+  instance = e;
 }

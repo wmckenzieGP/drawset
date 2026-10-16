@@ -92,6 +92,32 @@ function outlineNodes(doc: mupdf.PDFDocument, items: ReturnType<mupdf.Document["
   });
 }
 
+/**
+ * MuPDF's graftPage leaves /Annots behind, so markups are copied separately. Back-references to the source
+ * page (/P) and links to its other pages would drag the whole source page tree along, so /P is rewritten and
+ * page links and form widgets (which need the source's form) are not carried across.
+ */
+function copyAnnotations(dst: mupdf.PDFDocument, graft: mupdf.PDFGraftMap, src: mupdf.PDFDocument, srcIndex: number, dstIndex: number) {
+  const srcPage = src.findPage(srcIndex);
+  const annots = srcPage.get("Annots");
+  if (!annots.isArray()) return;
+  const keep = src.newArray();
+  for (let i = 0; i < annots.length; i++) {
+    const ref = annots.get(i);
+    const a = ref.resolve();
+    if (!a.isDictionary()) continue;
+    const sub = a.get("Subtype").isName() ? a.get("Subtype").asName() : "";
+    if (sub === "Widget") continue;
+    if (sub === "Link" && (a.get("Dest").isArray() || (a.get("A").isDictionary() && a.get("A").get("D").isArray()))) continue;
+    a.delete("P");
+    keep.push(ref);
+  }
+  const copied = graft.graftObject(keep);
+  const page = dst.findPage(dstIndex);
+  for (let i = 0; i < copied.length; i++) copied.get(i).resolve().put("P", page);
+  page.put("Annots", copied);
+}
+
 export class EngineCore {
   private docs = new Map<string, OpenDoc>();
 
@@ -264,7 +290,10 @@ export class EngineCore {
     const list = pages ?? [...Array(src.countPages()).keys()];
     const graft = d.doc.newGraftMap();
     const start = d.doc.countPages();
-    for (const p of list) graft.graftPage(-1, src, p);
+    for (const p of list) {
+      graft.graftPage(-1, src, p);
+      copyAnnotations(d.doc, graft, src, p, d.doc.countPages() - 1);
+    }
     const infos: PageInfo[] = [];
     const markups: MarkupRecord[] = [];
     for (let i = start; i < d.doc.countPages(); i++) {

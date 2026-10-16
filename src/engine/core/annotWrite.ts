@@ -325,7 +325,7 @@ function copyAppearance(ctx: WriteContext, annot: mupdf.PDFAnnotation, m: Markup
   const { doc } = ctx;
   const obj = annot.getObject();
   const src = doc.newIndirect(fromNum).resolve();
-  const ap = src.get("AP").get("N");
+  const ap = src.get("AP").isDictionary() ? src.get("AP").get("N") : src.get("AP");
   for (const key of ["Name", "IT"]) if (!src.get(key).isNull()) obj.put(key, src.get(key));
   const rect = transformRect(m.rect, ctx.toUser);
   if (!ap.isStream()) {
