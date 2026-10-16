@@ -49,7 +49,7 @@ const POLY_TOOLS = new Set<ToolId>(["polyline", "polygon", "cloud", "polylength"
 /** Where calibration picks go: the dialog listens. */
 export const useCalibrationPick = create<{ pick: { pageId: string; a: Pt; b: Pt } | null }>(() => ({ pick: null }));
 
-const BOX_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "textbox", "stamp", "image", "zoom"]);
+const BOX_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "textbox", "stamp", "image", "zoom", "redact", "erase"]);
 const TEXT_TOOLS = new Set<ToolId>(["text", "highlight", "underline", "strikeout"]);
 
 export class Controller {

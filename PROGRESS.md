@@ -2,7 +2,7 @@
 
 **Current item:** T1.18 Tier 1 release (waiting on S3 for the Windows build)
 **Last finished:** T1.17 print
-**Next up:** T2.4 erase and redact (Tier 2 continues while S3 is blocked)
+**Next up:** T2.5 overlay pages (Tier 2 continues while S3 is blocked)
 
 ## How to install
 Download `Drawset-Setup-<version>.exe` from the latest GitHub Release (https://github.com/wmckenziegp/drawset/releases) and run it. Windows SmartScreen may warn because the installer is not code-signed: choose "More info" then "Run anyway".
@@ -27,3 +27,4 @@ Download `Drawset-Setup-<version>.exe` from the latest GitHub Release (https://g
 - T2.1: page scales (metric 1:1–1:1000 presets, imperial presets, or two picked points and a known length) for one page, all pages or a range; precision and display units; stored as /VP viewports with /Measure /RL (R, X, D, A number formats). Full-page viewports are replaced; smaller detail viewports are kept. Scale changes are one undo step and recalculate measurements. The calibration fixture measures within 0.1%.
 - T2.2: length, polylength, area with cutouts (polygon-clipping, analytic tests incl. overlapping and partly outside cutouts), perimeter, count and angle, each with a caption drawn into its appearance stream. Written as /Line /IT /LineDimension, /PolyLine /IT /PolyLineDimension, /Polygon /IT /PolygonDimension with /Measure; values identical after reopening. Measurements panel shows the page scale, the selection and page totals.
 - T2.3: Markups List has a Measurement column and totals by type and unit; Export quantities writes unrounded values plus totals (unit test checks totals equal the sum). Fixed a layout bug where a wide toolbar pushed the right panel off screen.
+- T2.4: Erase and Redact tools (drag an area) and "Mark all for redaction" on search results create pending /Redact annotations that can be saved, reviewed and removed. "Review and apply redactions" applies them all with MuPDF (text removed, image pixels cleared, line art wholly inside removed; black box for redactions, blank for erase) and saves in full, never incrementally. Unit and e2e tests check the text is absent from MuPDF and pdf.js extraction while neighbouring text stays.

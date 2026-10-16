@@ -30,6 +30,8 @@ export type MarkupKind =
   | "perimeter"
   | "count"
   | "angle"
+  | "redact"
+  | "erase"
   | "foreign";
 
 export type RGB = [number, number, number];
@@ -169,11 +171,13 @@ export const KIND_LABELS: Record<MarkupKind, string> = {
   perimeter: "Perimeter",
   count: "Count",
   angle: "Angle",
+  redact: "Redaction",
+  erase: "Erase",
   foreign: "Annotation",
 };
 
 /** Which kinds use the frame rect as their primary geometry. */
-export const BOX_KINDS: ReadonlySet<MarkupKind> = new Set(["rectangle", "ellipse", "textbox", "note", "stamp", "image", "foreign"]);
+export const BOX_KINDS: ReadonlySet<MarkupKind> = new Set(["rectangle", "ellipse", "textbox", "note", "stamp", "image", "foreign", "redact", "erase"]);
 export const VERTEX_KINDS: ReadonlySet<MarkupKind> = new Set(["line", "arrow", "polyline", "polygon", "cloud", "length", "polylength", "area", "perimeter", "count", "angle"]);
 export const TEXT_MARKUP_KINDS: ReadonlySet<MarkupKind> = new Set(["highlight", "underline", "strikeout"]);
 

@@ -45,6 +45,8 @@ const P: Record<string, ReactElement> = {
   angle: <path d="M4 19h16M4 19L15 5M10 19a6 6 0 00-2.4-4.8" />,
   cutout: <path d="M4 5h16v14H4zM9 9h6v6H9z" />,
   calibrate: <path d="M3 9h18v6H3zM7 9v3M11 9v3M15 9v3M19 9v2" />,
+  redact: <path d="M4 7h16v10H4zM7 10h10M7 14h6" />,
+  erase: <path d="M8 20h12M5.5 14.5l8-8a2 2 0 012.8 0l2.2 2.2a2 2 0 010 2.8L12 18H8z M9 11l5 5" />,
   props: <path d="M4 7h10M18 7h2M4 17h4M12 17h8M14 4v6M8 14v6" />,
 };
 

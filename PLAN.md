@@ -31,7 +31,7 @@ Each item is about 2 hours or less. Tick `[x]` when its acceptance criteria pass
 - [x] T2.1 Calibration: two-point or preset scale (metric 1:1–1:1000, imperial), page or range, precision and units, stored as /VP /Measure /RL. *Accept:* calibration fixture measures within 0.1%; /VP valid after reopen.
 - [x] T2.2 Measurements: length, polylength, area with cutouts, perimeter, count, angle; captions; Measurements panel; recalculation on scale change. *Accept:* analytic area/length tests; /IT dimension intents with /Measure; values identical after reopen.
 - [x] T2.3 Measurement columns and totals in the Markups List; quantities CSV. *Accept:* CSV totals equal the sum of measurements.
-- [ ] T2.4 Erase and redact (area and searched text) with review before applying. *Accept:* text under the area is absent from extraction after apply.
+- [x] T2.4 Erase and redact (area and searched text) with review before applying. *Accept:* text under the area is absent from extraction after apply.
 - [ ] T2.5 Overlay pages: two pages, red/blue, two-point alignment, toggles, export as image-based PDF labelled as such. *Accept:* overlay of identical pages shows no colour difference; export opens in pdf.js.
 - [ ] T2.6 Tool Chest: save markup as tool, sets, recents, JSON import/export. *Accept:* a tool reproduces the original markup's properties exactly.
 - [ ] T2.7 Replies: threaded replies (/IRT /RT /R) shown in the Markups List. *Accept:* replies round-trip and display.

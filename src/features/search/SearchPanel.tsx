@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { engine } from "../../engine/client";
-import { scrollToPage, updateTab, useApp, type DocTab } from "../../state/store";
+import { commit, flash, scrollToPage, updateTab, useApp, withMarkups, type DocTab } from "../../state/store";
+import { baseMarkup } from "../viewer/create";
 import type { SearchHit } from "../../engine/types";
 import { bboxOf, type Pt } from "../../markup/geometry";
 
@@ -49,6 +50,21 @@ export function goToHit(key: string, index: number) {
   scrollToPage(key, pageIndex, bboxOf(pts));
 }
 
+/** Turns every search result into a pending redaction (applied later from the review dialog). */
+export function markHitsForRedaction(key: string) {
+  const t = useApp.getState().tabs.find((x) => x.key === key);
+  if (!t || !t.search.hits.length) return;
+  const bySrc = new Map(t.state.pages.map((p) => [p.src, p.id]));
+  const made = t.search.hits.flatMap((h) => {
+    const pageId = bySrc.get(h.page);
+    if (!pageId) return [];
+    const pts: Pt[] = h.quads.flatMap((q) => [[q[0], q[1]], [q[2], q[3]], [q[4], q[5]], [q[6], q[7]]] as Pt[]);
+    return [{ ...baseMarkup("redact", pageId), quads: h.quads, rect: bboxOf(pts), contents: t.search.query }];
+  });
+  commit(key, `Mark ${made.length} result${made.length === 1 ? "" : "s"} for redaction`, (s) => withMarkups(s, made));
+  flash(`Marked ${made.length} result${made.length === 1 ? "" : "s"} for redaction. Review and apply them from the Tools menu.`);
+}
+
 export function SearchPanel({ tab }: { tab: DocTab }) {
   const [q, setQ] = useState(tab.search.query);
   const input = useRef<HTMLInputElement>(null);
@@ -86,6 +102,11 @@ export function SearchPanel({ tab }: { tab: DocTab }) {
           ▼
         </button>
       </div>
+      {done && hits.length > 0 && (
+        <button className="btn small search-redact" onClick={() => markHitsForRedaction(tab.key)} data-testid="search-redact">
+          Mark all for redaction
+        </button>
+      )}
       <ul className="search-results" data-testid="search-results">
         {[...byPage.entries()].map(([page, idxs]) => {
           const pi = tab.state.pages.findIndex((p) => p.src === page);

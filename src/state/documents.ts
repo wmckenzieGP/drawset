@@ -49,7 +49,7 @@ export async function openPath(p: string) {
 }
 
 /** Builds the save plan: what changed since the last save. */
-export function buildPlan(t: DocTab, state: DocState = t.state, opts: { flatten?: boolean; pageIds?: string[] } = {}): SavePlan {
+export function buildPlan(t: DocTab, state: DocState = t.state, opts: { flatten?: boolean; applyRedactions?: boolean; pageIds?: string[] } = {}): SavePlan {
   const pages = opts.pageIds ? opts.pageIds.map((id) => state.pages.find((p) => p.id === id)).filter((p): p is DocState["pages"][number] => !!p) : state.pages;
   const physOf = new Map(state.pages.map((p) => [p.id, p.src]));
   const upserts: SavePlan["upserts"] = [];
@@ -68,6 +68,7 @@ export function buildPlan(t: DocTab, state: DocState = t.state, opts: { flatten?
     upserts,
     deletes,
     flatten: opts.flatten,
+    applyRedactions: opts.applyRedactions,
     defaultAuthor: useApp.getState().author,
   };
 }
@@ -78,7 +79,7 @@ function syncDirtyFlag() {
 useApp.subscribe(syncDirtyFlag);
 
 /** Saves in place (incremental) and reloads the document from the saved bytes. */
-export async function saveTab(key: string, opts: { flatten?: boolean } = {}): Promise<boolean> {
+export async function saveTab(key: string, opts: { flatten?: boolean; applyRedactions?: boolean } = {}): Promise<boolean> {
   const t = useApp.getState().tabs.find((x) => x.key === key);
   if (!t) return false;
   try {
@@ -104,7 +105,7 @@ export async function saveTab(key: string, opts: { flatten?: boolean } = {}): Pr
       search: { ...x.search, hits: [], current: -1, done: false },
       textSelection: null,
     }));
-    flash(opts.flatten ? "Markups flattened and saved." : `Saved ${t.name}.`);
+    flash(opts.flatten ? "Markups flattened and saved." : opts.applyRedactions ? "Redactions applied and saved." : `Saved ${t.name}.`);
     return true;
   } catch (e) {
     flash(`Save failed: ${(e as Error).message}`, "error");

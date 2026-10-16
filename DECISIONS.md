@@ -29,3 +29,6 @@ Each page has at most one scale (its full-page viewport). Setting a scale update
 
 ## 15. Area fills multiply
 Area measurements default to a pale solid fill drawn with the Multiply blend mode, so the drawing stays visible underneath and captions stay readable (an opacity-based fill also fades the caption).
+
+## 16. Redactions are pending annotations until applied, and applying rewrites the whole file
+Erase and redact areas are saved as /Redact annotations (erase marked in /DrawsetData) so they can be reviewed, shared and removed. Applying uses MuPDF's redaction per annotation: text removed, image pixels cleared, and line art removed only when wholly inside the area (MuPDF cannot cut paths). The save that applies them is a full, garbage-collected rewrite, because an incremental save would keep the removed content in the file's earlier revision.

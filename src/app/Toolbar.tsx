@@ -45,6 +45,10 @@ const GROUPS: [ToolId, string, string][][] = [
     ["count", "Count (Shift+C): click each item, Esc or double-click to finish", "count"],
     ["angle", "Angle (Shift+G): click a point, the vertex, then another point", "angle"],
   ],
+  [
+    ["erase", "Erase content: drag an area (removed when you apply redactions)", "erase"],
+    ["redact", "Redact: drag an area to black out (removed when you apply redactions)", "redact"],
+  ],
 ];
 
 /** Reads an image file into the form markups store (PNG/JPEG only; other formats are converted to PNG). */

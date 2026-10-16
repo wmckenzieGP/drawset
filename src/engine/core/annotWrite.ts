@@ -54,6 +54,9 @@ export function subtypeFor(m: Markup): mupdf.PDFAnnotationType {
       return "Polygon";
     case "count":
       return "Ink";
+    case "redact":
+    case "erase":
+      return "Redact";
     case "foreign":
       return m.subtype as mupdf.PDFAnnotationType;
   }
@@ -335,6 +338,17 @@ export function writeMarkup(ctx: WriteContext, annot: mupdf.PDFAnnotation, m: Ma
       if (it && m.measure?.scale) obj.put("Measure", measureObject(doc, m.measure.scale));
       else obj.delete("Measure");
       obj.delete("BE");
+      break;
+    }
+    case "redact":
+    case "erase": {
+      if (m.quads.length) obj.put("QuadPoints", nums(doc, m.quads.flatMap((q) => userPts(T, [[q[0], q[1]], [q[2], q[3]], [q[4], q[5]], [q[6], q[7]]]))));
+      else obj.delete("QuadPoints");
+      // what the area looks like once applied: black for a redaction, nothing for an erase
+      if (m.kind === "redact") obj.put("IC", colour(doc, [0, 0, 0]));
+      else obj.delete("IC");
+      obj.delete("OverlayText");
+      obj.delete("Repeat");
       break;
     }
     case "count": {

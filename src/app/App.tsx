@@ -1,4 +1,5 @@
 import { MeasurePanel } from "../features/measure/MeasurePanel";
+import { RedactDialog, openRedactDialog } from "../features/redact/RedactDialog";
 import { CalibrateDialog, openCalibrateDialog } from "../features/measure/CalibrateDialog";
 import { useEffect, useState } from "react";
 import * as Menu from "@radix-ui/react-dropdown-menu";
@@ -82,6 +83,7 @@ const TOOL_MENU: { group: string; tools: [ToolId, string, string?][] }[] = [
     group: "Measure",
     tools: [["calibrate", "Calibrate", "Shift+K"], ["length", "Length", "Shift+L"], ["polylength", "Polylength", "Shift+N"], ["area", "Area", "Shift+A"], ["cutout", "Area cutout"], ["perimeter", "Perimeter", "Shift+P"], ["count", "Count", "Shift+C"], ["angle", "Angle", "Shift+G"]],
   },
+  { group: "Redact", tools: [["erase", "Erase area"], ["redact", "Redact area"]] },
 ];
 
 function MenuBar() {
@@ -146,6 +148,7 @@ function MenuBar() {
             ))}
           </div>
         ))}
+        <Item label="Review and apply redactions…" onSelect={openRedactDialog} disabled={!has} />
         <Sep />
         <Item label={useApp.getState().tools.reuse ? "Turn reuse mode off" : "Turn reuse mode on"} shortcut="Ctrl+R" onSelect={() => useApp.setState((s) => ({ tools: { ...s.tools, reuse: !s.tools.reuse } }))} />
       </TopMenu>
@@ -319,6 +322,7 @@ export function App() {
       <PageDialogs />
       <PrintDialog />
       <CalibrateDialog />
+      <RedactDialog />
       <PreferencesDialog />
       {dragOver && <div className="drop-hint">Drop PDF files to open them</div>}
     </div>

@@ -7,7 +7,7 @@ import { concat, displayMatrix, type Matrix, type Pt, type Quad, type Rect, scal
 import type { Markup } from "../../markup/model";
 import type { DocInfo, MarkupRecord, OutlineNode, PageInfo, RenderRequest, SavePlan, SearchHit } from "../types";
 import { readPageMarkups } from "./annotRead";
-import { deleteAnnotationTree, ensurePopup, invertCtm, subtypeFor, writeMarkup, writeStatus, type WriteContext } from "./annotWrite";
+import { deleteAnnotationTree, ensurePopup, invertCtm, PRIVATE_KEY, subtypeFor, writeMarkup, writeStatus, type WriteContext } from "./annotWrite";
 import { safePageScale, writePageScale } from "./measureDict";
 
 export interface RawBitmap {
@@ -361,6 +361,7 @@ export class EngineCore {
         if (markup.kind !== "foreign") writeStatus(ctx, obj, markup);
       }
     }
+    if (plan.applyRedactions) EngineCore.applyRedactions(doc);
     // page scales (before rotation, so the viewport box matches the page as it is now)
     for (const p of plan.pages) {
       if (p.scale === undefined || p.index < 0 || p.index >= pageCount) continue;
@@ -381,10 +382,27 @@ export class EngineCore {
     if (!identity) doc.rearrangePages(order);
   }
 
+  /**
+   * Applies every /Redact annotation: text under it is removed, image pixels are cleared, and line art
+   * entirely inside it is removed. Redactions get a black box; Drawset's erase areas leave the page blank.
+   */
+  static applyRedactions(doc: mupdf.PDFDocument) {
+    for (let i = 0; i < doc.countPages(); i++) {
+      const page = doc.loadPage(i);
+      for (const a of page.getAnnotations()) {
+        if (a.getType() !== "Redact") continue;
+        const priv = a.getObject().get(PRIVATE_KEY);
+        const erase = priv.isString() && priv.asString().includes('"kind":"erase"');
+        a.applyRedaction(erase ? 0 : 1, mupdf.PDFPage.REDACT_IMAGE_PIXELS, mupdf.PDFPage.REDACT_LINE_ART_REMOVE_IF_COVERED, mupdf.PDFPage.REDACT_TEXT_REMOVE);
+      }
+    }
+  }
+
   save(docId: string, plan: SavePlan, mode: "incremental" | "full"): { bytes: Uint8Array; info: DocInfo; markups: MarkupRecord[] } {
     const d = this.get(docId);
     EngineCore.applyPlan(d.doc, plan);
-    const incremental = mode === "incremental" && d.doc.canBeSavedIncrementally();
+    // after redaction the removed content must not survive in an earlier revision of the file
+    const incremental = mode === "incremental" && !plan.applyRedactions && d.doc.canBeSavedIncrementally();
     const bytes = d.doc.saveToBuffer(incremental ? "incremental" : "compress,garbage=compact").asUint8Array().slice();
     const info = this.open(bytes, d.name, docId);
     return { bytes, info, markups: this.readMarkups(docId) };

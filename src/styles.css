@@ -900,3 +900,23 @@ input.small {
   border-top: 1px solid var(--line);
   font-variant-numeric: tabular-nums;
 }
+.dialog.wide {
+  width: min(620px, calc(100vw - 32px));
+}
+.redact-list {
+  max-height: 260px;
+  overflow-y: auto;
+  margin: 8px 0;
+  padding-left: 18px;
+}
+.redact-list li {
+  padding: 2px 0;
+}
+.btn.danger {
+  background: #b3261e;
+  border-color: #b3261e;
+}
+.search-redact {
+  margin: 4px 12px;
+  align-self: flex-start;
+}

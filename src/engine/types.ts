@@ -83,6 +83,8 @@ export interface SavePlan {
   deletes: number[];
   /** Burn markups into page content (permanent). */
   flatten?: boolean;
+  /** Apply every redaction and erase (removes content; forces a full rewrite so no old revision keeps it). */
+  applyRedactions?: boolean;
   defaultAuthor: string;
 }
 

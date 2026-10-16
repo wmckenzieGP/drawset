@@ -502,6 +502,30 @@ function measureOps(m: Markup): DrawOp[] {
   return ops;
 }
 
+/** Pending redaction or erase: an outlined, hatched area (nothing is removed until applied). */
+function redactOps(m: Markup): DrawOp[] {
+  const colour: RGB = m.kind === "redact" ? [0.85, 0.05, 0.05] : [0.1, 0.45, 0.85];
+  const areas: Seg[][] = m.quads.length ? m.quads.map((q) => polySegs(quadPolygon(q), true)) : [rectSegs(m.rect)];
+  const ops: DrawOp[] = [];
+  for (const segs of areas) {
+    const pts = segPoints(segs);
+    const b = bboxOf(pts);
+    // diagonal hatching clipped by eye to the box (drawn as short segments inside it)
+    const hatch: Seg[] = [];
+    const step = 6;
+    for (let d = -(b[3] - b[1]); d < b[2] - b[0]; d += step) {
+      const x0 = b[0] + Math.max(0, d);
+      const y0 = b[3] - Math.max(0, -d);
+      const len = Math.min(b[2] - x0, y0 - b[1]);
+      if (len <= 0) continue;
+      hatch.push(["M", x0, y0], ["L", x0 + len, y0 - len]);
+    }
+    ops.push({ t: "path", segs: hatch, fill: null, stroke: colour, width: 0.4, dash: null });
+    ops.push({ t: "path", segs, fill: null, stroke: colour, width: 1.2, dash: [4, 2] });
+  }
+  return ops;
+}
+
 /** Markup appearance in page space. Foreign annotations and kept appearances return no ops. */
 export function buildAppearance(m: Markup): Appearance {
   const s = m.style;
@@ -575,11 +599,16 @@ export function buildAppearance(m: Markup): Appearance {
     case "angle":
       ops.push(...measureOps(m));
       break;
+    case "redact":
+    case "erase":
+      ops.push(...redactOps(m));
+      break;
     case "foreign":
       break;
   }
   // box kinds keep /Rect equal to their frame so the frame survives save and reopen exactly
-  const frameIsBox = m.kind === "textbox" || m.kind === "stamp" || m.kind === "image" || m.kind === "note";
+  // (for redactions /Rect is the area to remove, so it must be exactly the frame)
+  const frameIsBox = m.kind === "textbox" || m.kind === "stamp" || m.kind === "image" || m.kind === "note" || m.kind === "redact" || m.kind === "erase";
   return { ops, bbox: frameIsBox ? m.rect : opsBounds(ops, m), opacity: s.opacity, blend };
 }
 

@@ -121,6 +121,8 @@ function kindFor(subtype: string, obj: mupdf.PDFObject, priv: Record<string, any
       return "underline";
     case "StrikeOut":
       return "strikeout";
+    case "Redact":
+      return pk === "erase" ? "erase" : "redact";
     case "Stamp":
       return pk === "image" || it === "StampImage" ? "image" : "stamp";
     default:
@@ -280,7 +282,9 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
       }
       case "highlight":
       case "underline":
-      case "strikeout": {
+      case "strikeout":
+      case "redact":
+      case "erase": {
         const q = numArray(obj.get("QuadPoints"));
         for (let i = 0; i + 7 < q.length; i += 8) {
           const p = pointsFrom(q.slice(i, i + 8), ctm);
