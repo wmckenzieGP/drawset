@@ -1165,3 +1165,58 @@ input.small {
   border-radius: 4px;
   font-size: 12px;
 }
+
+/* forms */
+.forms .form-actions {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.forms .form-actions input {
+  flex: 1;
+  min-width: 0;
+}
+.form-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.form-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.form-list li.focus {
+  background: var(--bg-3);
+}
+.form-list input[type="text"],
+.form-list textarea,
+.form-list select {
+  width: 100%;
+  box-sizing: border-box;
+}
+.form-list input[type="checkbox"] {
+  align-self: flex-start;
+}
+.form-name {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.form-name:hover {
+  text-decoration: underline;
+}
+.form-radios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.form-summary {
+  margin: 0 4px 6px;
+}

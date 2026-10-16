@@ -4,7 +4,7 @@
  */
 import type { ChestTool } from "../features/toolchest/chest";
 import { create } from "zustand";
-import type { DocInfo, MarkupRecord, OutlineNode, PageInfo, SearchHit } from "../engine/types";
+import type { DocInfo, FormField, MarkupRecord, OutlineNode, PageInfo, SearchHit } from "../engine/types";
 import type { Quad, Rect } from "../markup/geometry";
 import { DEFAULT_STYLE, type Markup, type MarkupKind, type MarkupStyle } from "../markup/model";
 import { isMeasure, type PageScale } from "../markup/measure";
@@ -29,6 +29,8 @@ export interface DocState {
   markups: Record<string, Markup>;
   /** Replacement bookmarks; undefined keeps the file's. Pages are physical indices. */
   outline?: OutlineNode[];
+  /** Form field values changed since the file was opened or saved, by field name. */
+  fields?: Record<string, string>;
 }
 
 export interface ViewState {
@@ -75,6 +77,10 @@ export interface DocTab {
   currentPage: number;
   search: SearchState;
   textSelection: TextSelection | null;
+  /** The file's form fields (values as saved); null until read or when there is no form. */
+  fields: FormField[] | null;
+  /** Field the Forms panel should show and focus. */
+  formFocus: { name: string; nonce: number } | null;
 }
 
 export type ToolId =
@@ -107,7 +113,7 @@ export interface AppState {
   active: string | null;
   tools: ToolState;
   author: string;
-  leftPanel: "thumbnails" | "bookmarks" | "search" | "toolchest" | null;
+  leftPanel: "thumbnails" | "bookmarks" | "search" | "toolchest" | "forms" | null;
   rightPanel: boolean;
   bottomPanel: boolean;
   message: { text: string; kind: "info" | "error" } | null;
@@ -287,6 +293,8 @@ export function addTab(info: DocInfo, name: string, path: string | null): string
     currentPage: 0,
     search: { query: "", hits: [], current: -1, running: false, done: false },
     textSelection: null,
+    fields: null,
+    formFocus: null,
   };
   useApp.setState((s) => ({ tabs: [...s.tabs, tab], active: key }));
   return key;

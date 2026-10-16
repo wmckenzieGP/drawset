@@ -1,5 +1,7 @@
 import { MeasurePanel } from "../features/measure/MeasurePanel";
 import { RedactDialog, openRedactDialog } from "../features/redact/RedactDialog";
+import { FormsPanel } from "../features/forms/FormsPanel";
+import { flattenForms } from "../features/forms/forms";
 import { ToolChestPanel, addSelectionToChest } from "../features/toolchest/ToolChestPanel";
 import { LabelRegionDialog, startLabelRegion } from "../features/pages/LabelRegionDialog";
 import { bookmarksFromLabels } from "../features/pages/labelRegion";
@@ -110,6 +112,7 @@ function MenuBar() {
         <Sep />
         <Item label="Print…" shortcut="Ctrl+P" onSelect={openPrintDialog} disabled={!has} />
         <Item label="Flatten markups…" onSelect={cmd.flatten} disabled={!has} />
+        <Item label="Flatten form fields…" onSelect={() => tab && flattenForms(tab)} disabled={!tab?.fields?.length} />
         <Sep />
         <Item label="Preferences…" onSelect={openPreferences} />
         <Item label="Close" shortcut="Ctrl+W" onSelect={cmd.close} disabled={!has} />
@@ -143,6 +146,7 @@ function MenuBar() {
         <Item label="Bookmarks" onSelect={() => useApp.setState((s) => ({ leftPanel: s.leftPanel === "bookmarks" ? null : "bookmarks" }))} />
         <Item label="Search" shortcut="Ctrl+F" onSelect={() => useApp.setState({ leftPanel: "search" })} />
         <Item label="Tool Chest" onSelect={() => useApp.setState((s) => ({ leftPanel: s.leftPanel === "toolchest" ? null : "toolchest" }))} />
+        <Item label="Form fields" onSelect={() => useApp.setState((s) => ({ leftPanel: s.leftPanel === "forms" ? null : "forms" }))} />
         <Item label={split ? "Close split view" : "Split view"} onSelect={toggleSplit} disabled={!has} />
         <Item label={split?.sync === false ? "Sync split panes" : "Stop syncing split panes"} onSelect={() => split && useApp.setState({ split: { ...split, sync: !split.sync } })} disabled={!split} />
         <Sep />
@@ -330,9 +334,9 @@ export function App() {
         {tab && leftPanel && (
           <aside className="panel left" aria-label="Side panel">
             <div className="panel-tabs">
-              {(["thumbnails", "bookmarks", "search", "toolchest"] as const).map((p) => (
-                <button key={p} className={leftPanel === p ? "active" : ""} onClick={() => useApp.setState({ leftPanel: p })} title={p === "toolchest" ? "Tool Chest" : p[0].toUpperCase() + p.slice(1)} data-testid={`panel-${p}`}>
-                  <Icon name={p === "thumbnails" ? "pages" : p === "bookmarks" ? "bookmark" : p === "toolchest" ? "chest" : "search"} size={16} />
+              {(["thumbnails", "bookmarks", "search", "toolchest", ...(tab.info.hasForm || tab.fields?.length ? (["forms"] as const) : [])] as const).map((p) => (
+                <button key={p} className={leftPanel === p ? "active" : ""} onClick={() => useApp.setState({ leftPanel: p })} title={p === "toolchest" ? "Tool Chest" : p === "forms" ? "Form fields" : p[0].toUpperCase() + p.slice(1)} data-testid={`panel-${p}`}>
+                  <Icon name={p === "thumbnails" ? "pages" : p === "bookmarks" ? "bookmark" : p === "toolchest" ? "chest" : p === "forms" ? "form" : "search"} size={16} />
                 </button>
               ))}
             </div>
@@ -340,6 +344,7 @@ export function App() {
             {leftPanel === "bookmarks" && <BookmarksPanel tab={tab} />}
             {leftPanel === "search" && <SearchPanel tab={tab} />}
             {leftPanel === "toolchest" && <ToolChestPanel tab={tab} />}
+            {leftPanel === "forms" && <FormsPanel tab={tab} />}
           </aside>
         )}
         <section className="center">

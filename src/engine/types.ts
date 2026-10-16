@@ -83,6 +83,10 @@ export interface SavePlan {
   deletes: number[];
   /** Burn markups into page content (permanent). */
   flatten?: boolean;
+  /** Form field values by field name (already applied to the open document; repeated for copies). */
+  fieldValues?: Record<string, string>;
+  /** Burn form fields into the page content (permanent). */
+  flattenForms?: boolean;
   /** Page labels for the saved pages, in plan order; omitted when unchanged. */
   pageLabels?: string[];
   /** Replacement document outline (pages are physical indices); omitted when unchanged. */
@@ -96,6 +100,24 @@ export interface SaveResult {
   bytes: Uint8Array;
   info: DocInfo;
   markups: MarkupRecord[];
+}
+
+export type FormFieldType = "text" | "checkbox" | "radio" | "choice" | "button" | "signature";
+
+/** A form field (all widgets sharing one fully qualified name). */
+export interface FormField {
+  name: string;
+  type: FormFieldType;
+  /** Text, chosen option, or the on-state name ("Off" when unchecked). */
+  value: string;
+  options: string[];
+  /** On-state names of check boxes and radio buttons. */
+  onValues: string[];
+  multiline: boolean;
+  readOnly: boolean;
+  maxLen: number;
+  /** Where the field appears: physical page index, page-space rectangle and (buttons) the widget's on-state. */
+  widgets: { page: number; rect: Rect; on?: string }[];
 }
 
 /** A page's vector geometry for snapping, in page space. */
@@ -136,6 +158,10 @@ export interface PdfEngine {
   save(docId: string, plan: SavePlan, mode: "incremental" | "full"): Promise<SaveResult>;
   /** Writes the plan into a copy and returns its bytes; the open document is unchanged. */
   saveCopy(docId: string, plan: SavePlan): Promise<Uint8Array>;
+  /** The document's form fields. */
+  formFields(docId: string): Promise<FormField[]>;
+  /** Fills fields in the open document (by name); returns the physical pages that changed. */
+  setFieldValues(docId: string, values: Record<string, string>): Promise<number[]>;
   /** Text inside `rect` (page space) on each of `pages`, for labelling pages from a title-block region. */
   textInRect(docId: string, pages: number[], rect: Rect): Promise<string[]>;
   /** Vector geometry of a page's content (markups excluded) for snapping. */

@@ -41,9 +41,9 @@ describe("fixtures", () => {
     expect(pj.length).toBeGreaterThanOrEqual(8);
   });
 
-  it("form fixture has three fields", () => {
+  it("form fixture has four fields (five widgets)", () => {
     const doc = openMupdf(read("form.pdf"));
-    expect(doc.loadPage(0).getWidgets().length).toBe(3);
+    expect(doc.loadPage(0).getWidgets().length).toBe(5);
   });
 
   it("scanned page has no text", () => {

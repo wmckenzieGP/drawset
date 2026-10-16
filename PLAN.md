@@ -42,15 +42,10 @@ Each item is about 2 hours or less. Tick `[x]` when its acceptance criteria pass
 - [x] T3.1 Compare documents (raster diff, clouds listed as markups). *Accept:* a revised sheet gets one cloud around each change and none elsewhere; identical pages get none.
 - [x] T3.2 Split view with synced pan, zoom and page. *Accept:* scrolling or zooming one pane moves the other to the same page, spot and zoom; sync can be turned off.
 - [x] T3.3 Page labels from a title-block region; bookmarks from labels. *Accept:* every sheet of the 200-page set is labelled from its title block; /PageLabels and /Outlines read back in MuPDF and pdf.js.
-- [ ] T3.4 Forms: fill, save, flatten.
+- [x] T3.4 Forms: fill, save, flatten. *Accept:* text, check box, choice and radio fields filled in Drawset read back with the same values and appearances in MuPDF and pdf.js; flattening leaves no widgets and the page looks the same.
 - [ ] T3.5 Headers, footers and watermarks with date, file name, page label and "page n of N" variables.
 - [ ] T3.6 Hyperlinks: link an area to a page, a file or a URL, with back navigation.
 - [ ] T3.7 Security: add or remove an open password and permission restrictions.
 - [ ] T3.8 Crash recovery: journal unsaved markups every 60 s and offer to restore after a crash.
 - [ ] T3.9 OCR: invisible text layer for scanned pages with tesseract.js.
-- [ ] T3.5 Headers, footers and watermarks with variables.
-- [ ] T3.6 Hyperlinks to page, file or URL with back navigation.
-- [ ] T3.7 Security: open password and permissions.
-- [ ] T3.8 Crash recovery journal every 60 s.
-- [ ] T3.9 OCR text layer with tesseract.js.
 - [ ] T3.10 Tier 3 release v0.3 and final report.

@@ -8,6 +8,7 @@ import { create } from "zustand";
 import { engine } from "../../engine/client";
 import { apply, normRect, rectPoints, snapAngle, snapSquare, type Pt, type Quad, type Rect, dist, rectContains, transformRect } from "../../markup/geometry";
 import { markupBounds } from "../../markup/appearance";
+import { clickField } from "../forms/forms";
 import { canResize, hitTest, scaleBetween, setVertex, translate, vertexHandles, withDerivedRect } from "../../markup/edit";
 import { KIND_LABELS, nowIso, type Markup, type MarkupKind } from "../../markup/model";
 import { commit, flash, updateTab, useApp, withMarkups, type DocTab, type ToolId } from "../../state/store";
@@ -286,6 +287,7 @@ export class Controller {
         this.drag = { t: "move", page, start: p, last: p, originals, moved: false };
         return;
       }
+      if (!e.shiftKey && !e.ctrlKey && tab.fields?.length && clickField(tab, page.entry.src, p)) return;
       this.drag = { t: "marquee", page, a: p, b: p, additive: e.shiftKey || e.ctrlKey };
       if (!this.drag.additive) this.setSelection([]);
       return;

@@ -7,7 +7,7 @@
  *   set-200.pdf         200-page A1 set with page labels M-001…, bookmarks and planted search terms
  *   scanned.pdf         one page holding a single raster image and no text
  *   annotated.pdf       existing annotations of several types, with unknown and vendor private keys
- *   form.pdf            AcroForm with a text field, a check box and a choice field
+ *   form.pdf            AcroForm with a text field, a check box, a choice field and a radio group
  *
  * Usage: npm run fixtures            (BIG=1 makes set-200 roughly 100 MB with embedded noise images)
  */
@@ -357,16 +357,26 @@ function makeForm() {
   const doc = new mupdf.PDFDocument();
   const helv = helvetica(doc);
   const res = { Font: { F1: helv } };
-  const content = "0 g " + text(60, 760, 16, "Drawset form fixture") + text(60, 700, 11, "Project name") + text(60, 650, 11, "Approved") + text(60, 600, 11, "Discipline");
+  const content = "0 g " + text(60, 760, 16, "Drawset form fixture") + text(60, 700, 11, "Project name") + text(60, 650, 11, "Approved") + text(60, 600, 11, "Discipline") + text(60, 550, 11, "Stage") + text(200, 550, 11, "Concept") + text(300, 550, 11, "Tender");
   const pageObj = doc.addPage([0, 0, 595, 842], 0, res, content);
   doc.insertPage(-1, pageObj);
   const pageRef = doc.findPage(0);
   const tx = doc.addObject({ Type: "Annot", Subtype: "Widget", FT: "Tx", T: doc.newString("project_name"), Rect: [160, 690, 400, 712], F: 4, DA: doc.newString("/Helv 11 Tf 0 g"), V: doc.newString("Hospital Stage 2"), P: pageRef, MK: { BC: [0, 0, 0] } });
   const cb = doc.addObject({ Type: "Annot", Subtype: "Widget", FT: "Btn", T: doc.newString("approved"), Rect: [160, 642, 176, 658], F: 4, V: doc.newName("Off"), AS: doc.newName("Off"), P: pageRef, MK: { BC: [0, 0, 0], CA: doc.newString("4") }, DA: doc.newString("/ZaDb 0 Tf 0 g") });
   const ch = doc.addObject({ Type: "Annot", Subtype: "Widget", FT: "Ch", Ff: 131072, T: doc.newString("discipline"), Rect: [160, 590, 400, 612], F: 4, Opt: [doc.newString("Mechanical"), doc.newString("Electrical"), doc.newString("Hydraulic")], V: doc.newString("Mechanical"), DA: doc.newString("/Helv 11 Tf 0 g"), P: pageRef, MK: { BC: [0, 0, 0] } });
-  pageRef.put("Annots", [tx, cb, ch]);
+  // radio group "stage": two kids with their own on-states
+  const radio = doc.addObject({ FT: "Btn", Ff: 49152, T: doc.newString("stage"), V: doc.newName("Off"), Kids: [] });
+  const kid = (on: string, x: number) => {
+    const ap = (body: string) => doc.addStream(body, { Type: "XObject", Subtype: "Form", BBox: [0, 0, 14, 14] });
+    return doc.addObject({ Type: "Annot", Subtype: "Widget", Parent: radio, Rect: [x, 545, x + 14, 559], F: 4, AS: doc.newName("Off"), P: pageRef, MK: { BC: [0, 0, 0], CA: doc.newString("l") }, DA: doc.newString("/ZaDb 0 Tf 0 g"), AP: { N: { [on]: ap("q 0 G 1 w 1 1 12 12 re S 0 g 4 4 6 6 re f Q"), Off: ap("q 0 G 1 w 1 1 12 12 re S Q") } } });
+  };
+  const k1 = kid("Concept", 180);
+  const k2 = kid("Tender", 280);
+  radio.get("Kids").push(k1);
+  radio.get("Kids").push(k2);
+  pageRef.put("Annots", [tx, cb, ch, k1, k2]);
   const zadb = doc.addObject({ Type: "Font", Subtype: "Type1", BaseFont: "ZapfDingbats" });
-  doc.getTrailer().get("Root").put("AcroForm", doc.addObject({ Fields: [tx, cb, ch], DA: doc.newString("/Helv 0 Tf 0 g"), DR: { Font: { Helv: helv, ZaDb: zadb } }, NeedAppearances: false }));
+  doc.getTrailer().get("Root").put("AcroForm", doc.addObject({ Fields: [tx, cb, ch, radio], DA: doc.newString("/Helv 0 Tf 0 g"), DR: { Font: { Helv: helv, ZaDb: zadb } }, NeedAppearances: false }));
   const page = doc.loadPage(0);
   for (const w of page.getWidgets()) w.update();
   save(doc, "form.pdf");

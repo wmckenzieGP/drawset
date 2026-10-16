@@ -37,6 +37,7 @@ const P: Record<string, ReactElement> = {
   pages: <path d="M7 3h8l4 4v12H7zM5 7v14h11" />,
   bookmark: <path d="M7 3h10v18l-5-4-5 4z" />,
   chest: <path d="M3 9h18v10H3zM3 13h18M10 13v2h4v-2M8 9V6h8v3" />,
+  form: <path d="M5 3h14v18H5zM8 7h8M8 11h3M13 11h3v3h-3zM8 16h8" />,
   edit: <path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" />,
   list: <path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" />,
   length: <path d="M4 15l16-6M4 11.5l1.5 4M18.5 5.5L20 9.5M9 13.2l-.6-1.6M13.5 11.5l-.6-1.6" />,

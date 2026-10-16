@@ -47,3 +47,6 @@ Within 8 screen pixels the nearest markup vertex or drawing end point wins; only
 
 ## 21. Page labels are written as one prefix per page
 Labels read from title blocks are arbitrary text, so /PageLabels gives each page its own range with the label as /P and no numbering style; every viewer shows exactly that text. When pages are reordered or deleted in a file that has its own labels, the labels are rewritten for the new order so each stays with its sheet. Generated bookmarks replace the old ones (undoable) and point at the page objects with /Fit.
+
+## 22. Form values live in the undo history; the engine follows
+Filled values are part of the undoable document state (only the fields that differ from the file). A store subscriber sends just the changed values to the engine, which sets them with MuPDF's widget API and regenerates their appearance streams, so the page, thumbnails, print and save all show the same values. Clicking a check box or radio button on the page toggles it; text and list fields are edited in the Forms panel rather than in place, which keeps one editing path and one undo step per field. Typing in one text field within 1.5 s is one undo step. Flattening forms is a separate command from flattening markups, asks first, and removes /AcroForm along with the widgets. Signature fields and buttons are listed but not filled.

@@ -20,6 +20,7 @@ export async function openFiles(files: OpenedFile[]) {
       const info = await engine().open(f.bytes, f.name);
       const key = addTab(info, f.name, f.path);
       rememberRecentName(f.name);
+      if (info.hasForm) loadFields(key);
       useApp.setState({ busy: null });
       // markups load after the first page is on screen
       engine()
@@ -49,8 +50,56 @@ export async function openPath(p: string) {
   }
 }
 
+async function loadFields(key: string) {
+  const t = useApp.getState().tabs.find((x) => x.key === key);
+  if (!t) return;
+  try {
+    const fields = await engine().formFields(t.docId);
+    updateTab(key, (x) => ({ ...x, fields }));
+  } catch (e) {
+    flash(`Could not read the form: ${(e as Error).message}`, "error");
+  }
+}
+
+/** Field values the engine document currently holds, per document (absent: as in the file). */
+const appliedFields = new Map<string, Record<string, string>>();
+
+export function fileFieldValues(t: DocTab): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const f of t.fields ?? []) out[f.name] = f.value;
+  return out;
+}
+
+// keeps the engine's form in step with the undoable state, then redraws the pages that changed
+useApp.subscribe((s, prev) => {
+  for (const t of s.tabs) {
+    if (!t.fields) continue;
+    const before = prev.tabs.find((x) => x.key === t.key);
+    if (before && before.state.fields === t.state.fields && before.fields === t.fields) continue;
+    const file = fileFieldValues(t);
+    const applied = appliedFields.get(t.docId) ?? file;
+    const target = { ...file, ...(t.state.fields ?? {}) };
+    const diff: Record<string, string> = {};
+    for (const [k, v] of Object.entries(target)) if (applied[k] !== v) diff[k] = v;
+    if (!Object.keys(diff).length) continue;
+    appliedFields.set(t.docId, target);
+    engine()
+      .setFieldValues(t.docId, diff)
+      .then((pages) => {
+        if (pages.length) renderCache.refreshDoc(t.docId, new Set(pages));
+      })
+      .catch((e) => flash(`Could not fill the form: ${(e as Error).message}`, "error"));
+  }
+});
+
 /** Builds the save plan: what changed since the last save. */
-export function buildPlan(t: DocTab, state: DocState = t.state, opts: { flatten?: boolean; applyRedactions?: boolean; pageIds?: string[] } = {}): SavePlan {
+export interface SaveOptions {
+  flatten?: boolean;
+  flattenForms?: boolean;
+  applyRedactions?: boolean;
+}
+
+export function buildPlan(t: DocTab, state: DocState = t.state, opts: SaveOptions & { pageIds?: string[] } = {}): SavePlan {
   const pages = opts.pageIds ? opts.pageIds.map((id) => state.pages.find((p) => p.id === id)).filter((p): p is DocState["pages"][number] => !!p) : state.pages;
   const physOf = new Map(state.pages.map((p) => [p.id, p.src]));
   const upserts: SavePlan["upserts"] = [];
@@ -73,6 +122,8 @@ export function buildPlan(t: DocTab, state: DocState = t.state, opts: { flatten?
   return {
     ...(pageLabels ? { pageLabels } : {}),
     ...(outline ? { outline } : {}),
+    ...(state.fields && Object.keys(state.fields).length ? { fieldValues: state.fields } : {}),
+    ...(opts.flattenForms ? { flattenForms: true } : {}),
     pages: pages.map((p) => ({ index: p.src, rotate: (p.info.rotate + p.rotation) % 360, ...(sameScale(p.scale, p.info.scale) ? {} : { scale: p.scale }) })),
     upserts,
     deletes,
@@ -88,7 +139,7 @@ function syncDirtyFlag() {
 useApp.subscribe(syncDirtyFlag);
 
 /** Saves in place (incremental) and reloads the document from the saved bytes. */
-export async function saveTab(key: string, opts: { flatten?: boolean; applyRedactions?: boolean } = {}): Promise<boolean> {
+export async function saveTab(key: string, opts: SaveOptions = {}): Promise<boolean> {
   const t = useApp.getState().tabs.find((x) => x.key === key);
   if (!t) return false;
   try {
@@ -98,6 +149,8 @@ export async function saveTab(key: string, opts: { flatten?: boolean; applyRedac
     renderCache.invalidateDoc(t.docId);
     invalidateApBitmaps(t.docId);
     forgetContentIndexes(t.docId);
+    const fields = res.info.hasForm ? await engine().formFields(t.docId) : null;
+    appliedFields.delete(t.docId);
     const path = await saveInPlace(t.path, t.name, res.bytes);
     const pages = pagesFromInfo(res.info);
     const state: DocState = { pages, markups: recordsToMarkups(res.markups, pages) };
@@ -114,8 +167,9 @@ export async function saveTab(key: string, opts: { flatten?: boolean; applyRedac
       markupsLoaded: true,
       search: { ...x.search, hits: [], current: -1, done: false },
       textSelection: null,
+      fields,
     }));
-    flash(opts.flatten ? "Markups flattened and saved." : opts.applyRedactions ? "Redactions applied and saved." : `Saved ${t.name}.`);
+    flash(opts.flattenForms ? "Form fields flattened and saved." : opts.flatten ? "Markups flattened and saved." : opts.applyRedactions ? "Redactions applied and saved." : `Saved ${t.name}.`);
     return true;
   } catch (e) {
     flash(`Save failed: ${(e as Error).message}`, "error");
@@ -159,6 +213,7 @@ export async function closeTab(key: string, force = false): Promise<boolean> {
     const active = s.active === key ? (tabs[Math.min(idx, tabs.length - 1)]?.key ?? null) : s.active;
     return { tabs, active };
   });
+  appliedFields.delete(t.docId);
   await engine().close(t.docId);
   return true;
 }

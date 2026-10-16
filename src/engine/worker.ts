@@ -19,6 +19,8 @@ const methods: Record<string, Handler> = {
   saveCopy: (docId: string, plan) => core.saveCopy(docId, plan),
   imagePdf: (pages, title: string) => core.imagePdf(pages, title),
   snapGeometry: (docId: string, page: number) => core.snapGeometry(docId, page),
+  formFields: (docId: string) => core.formFields(docId),
+  setFieldValues: (docId: string, values) => core.setFieldValues(docId, values),
   textInRect: (docId: string, pages: number[], rect) => core.textInRect(docId, pages, rect),
 };
 

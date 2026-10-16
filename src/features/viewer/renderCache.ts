@@ -21,6 +21,7 @@ const STALE_MS = 400;
 
 class RenderCache {
   private bitmaps = new Map<string, ImageBitmap>();
+  private reqs = new Map<string, RenderRequest>();
   private queue = new Map<string, Entry>();
   private inFlight = new Set<string>();
   private listeners = new Set<() => void>();
@@ -56,9 +57,30 @@ class RenderCache {
       if (k.startsWith(docId + ":")) {
         this.bitmaps.get(k)?.close();
         this.bitmaps.delete(k);
+        this.reqs.delete(k);
       }
     }
     for (const k of [...this.queue.keys()]) if (k.startsWith(docId + ":")) this.queue.delete(k);
+  }
+
+  /**
+   * Re-renders a document's cached bitmaps in place (after its content changed in memory, such as a filled
+   * form field). The old bitmaps stay on screen until the new ones arrive, so nothing flickers.
+   */
+  refreshDoc(docId: string, pages?: Set<number>) {
+    for (const [key, req] of this.reqs) {
+      if (req.docId !== docId || (pages && !pages.has(req.page)) || !this.bitmaps.has(key)) continue;
+      engine()
+        .render(req)
+        .then((bmp) => {
+          if (!bmp.image) return;
+          if (!this.bitmaps.has(key)) return bmp.image.close();
+          this.bitmaps.get(key)?.close();
+          this.bitmaps.set(key, bmp.image);
+          this.notify();
+        })
+        .catch(() => undefined);
+    }
   }
 
   subscribe(fn: () => void) {
@@ -90,14 +112,18 @@ class RenderCache {
       this.queue.delete(best.key);
       this.inFlight.add(best.key);
       const key = best.key;
+      const req = best.req;
       engine()
-        .render(best.req)
+        .render(req)
         .then((bmp) => {
           if (bmp.image) {
+            this.bitmaps.get(key)?.close();
             this.bitmaps.set(key, bmp.image);
+            this.reqs.set(key, req);
             while (this.bitmaps.size > MAX_BITMAPS) {
               const [oldK, oldB] = this.bitmaps.entries().next().value as [string, ImageBitmap];
               this.bitmaps.delete(oldK);
+              this.reqs.delete(oldK);
               oldB.close();
             }
           }
