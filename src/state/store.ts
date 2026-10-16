@@ -78,6 +78,8 @@ export interface DocTab {
   markupsLoaded: boolean;
   view: ViewState;
   currentPage: number;
+  /** Pages visited by following links and bookmarks (positions in the page list), for Back and Forward. */
+  nav: { back: number[]; fwd: number[] };
   search: SearchState;
   textSelection: TextSelection | null;
   /** The file's form fields (values as saved); null until read or when there is no form. */
@@ -183,6 +185,7 @@ export const KIND_DEFAULTS: Partial<Record<MarkupKind, Partial<MarkupStyle>>> = 
   perimeter: { color: [0.55, 0.2, 0.75], width: 1.5, fontSize: 10 },
   count: { color: [0.9, 0.1, 0.1], width: 1, fontSize: 10 },
   angle: { color: [0.85, 0.45, 0.05], width: 1, fontSize: 10 },
+  link: { color: null, width: 1 },
 };
 
 export function defaultStyleFor(kind: MarkupKind): MarkupStyle {
@@ -294,6 +297,7 @@ export function addTab(info: DocInfo, name: string, path: string | null): string
     markupsLoaded: false,
     view: { scale: 0.25, rotation: 0, fit: "page" },
     currentPage: 0,
+    nav: { back: [], fwd: [] },
     search: { query: "", hits: [], current: -1, running: false, done: false },
     textSelection: null,
     fields: null,

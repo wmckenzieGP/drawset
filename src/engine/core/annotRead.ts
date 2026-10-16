@@ -5,9 +5,10 @@ import { DEFAULT_STYLE, type FontFamily, type LineEnd, LINE_ENDS, type MarkupKin
 import type { MarkupRecord } from "../types";
 import { PRIVATE_KEY } from "./annotWrite";
 import { readMeasure, safePageScale } from "./measureDict";
+import { readLinkTarget } from "./links";
 import { isMeasure, type PageScale } from "../../markup/measure";
 
-const SKIP_SUBTYPES = new Set(["Popup", "Widget", "Link"]);
+const SKIP_SUBTYPES = new Set(["Popup", "Widget"]);
 
 function str(o: mupdf.PDFObject): string {
   return o.isString() ? o.asString() : "";
@@ -123,6 +124,8 @@ function kindFor(subtype: string, obj: mupdf.PDFObject, priv: Record<string, any
       return "strikeout";
     case "Redact":
       return pk === "erase" ? "erase" : "redact";
+    case "Link":
+      return "link";
     case "Stamp":
       return pk === "image" || it === "StampImage" ? "image" : "stamp";
     default:
@@ -146,6 +149,8 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
     if (!obj.isDictionary()) continue;
     const subtype = name(obj.get("Subtype"));
     if (!subtype || SKIP_SUBTYPES.has(subtype)) continue;
+    // links Drawset cannot edit (scripts, named actions) are left alone
+    if (subtype === "Link" && !readLinkTarget(page._doc, obj)) continue;
     entries.push({ num: ref.isIndirect() ? ref.asIndirect() : 0, obj, subtype });
   }
 
@@ -299,6 +304,13 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
         break;
       }
       case "highlight":
+      case "link": {
+        rec.link = readLinkTarget(page._doc, obj) ?? undefined;
+        // a link draws a border only with a width and a colour
+        if (!color || !(rec.style.width > 0)) rec.style = { ...rec.style, color: null, width: rec.style.width > 0 ? rec.style.width : 1 };
+        rec.subject = rec.subject || "Hyperlink";
+        break;
+      }
       case "underline":
       case "strikeout":
       case "redact":

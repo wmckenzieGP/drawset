@@ -4,7 +4,7 @@ import { drawAppearance } from "../../markup/draw";
 import { type Quad } from "../../markup/geometry";
 import type { Markup } from "../../markup/model";
 import { engine } from "../../engine/client";
-import type { DocTab } from "../../state/store";
+import { useApp, type DocTab } from "../../state/store";
 import { HANDLE_PX, type Controller } from "./controller";
 import { visibleRange, type Layout, type PageLayout } from "./layout";
 import { markupsInRect } from "./markupIndex";
@@ -93,6 +93,19 @@ export interface OverlayParams {
   editingId: string | null;
 }
 
+/** Editor-only outline for a link that draws nothing in the file. */
+function linkHint(ctx: CanvasRenderingContext2D, m: Markup, devScale: number) {
+  const r = m.rect;
+  ctx.save();
+  ctx.strokeStyle = "rgba(30,120,255,0.85)";
+  ctx.fillStyle = "rgba(30,120,255,0.08)";
+  ctx.lineWidth = 1.5 / devScale;
+  ctx.setLineDash([4 / devScale, 3 / devScale]);
+  ctx.fillRect(r[0], r[1], r[2] - r[0], r[3] - r[1]);
+  ctx.strokeRect(r[0], r[1], r[2] - r[0], r[3] - r[1]);
+  ctx.restore();
+}
+
 export function drawOverlay(p: OverlayParams) {
   const { normal, multiply, dpr, layout, tab, controller } = p;
   for (const ctx of [normal, multiply]) {
@@ -102,6 +115,8 @@ export function drawOverlay(p: OverlayParams) {
   const [first, last] = visibleRange(layout, p.scrollTop, p.scrollTop + p.height);
   const selected = new Set(tab.selection);
   const preview = controller.preview();
+  // links without a border are outlined while the Link tool is in use, or when selected
+  const showLinks = useApp.getState().tools.tool === "link";
   const hits = tab.search.hits;
   for (let i = first; i <= last; i++) {
     const page = layout.pages[i];
@@ -129,10 +144,12 @@ export function drawOverlay(p: OverlayParams) {
       }
       const ctx = m.kind === "highlight" || m.kind === "highlighter" || m.kind === "area" ? multiply : normal;
       drawMarkup(ctx, tab, page, m, scale * dpr);
+      if (m.kind === "link" && !m.style.color && showLinks) linkHint(normal, m, scale * dpr);
     }
     if (preview && preview.page.entry.id === page.entry.id) {
       const ctx = preview.m.kind === "highlight" || preview.m.kind === "highlighter" || preview.m.kind === "area" ? multiply : normal;
       drawMarkup(ctx, tab, page, preview.m, scale * dpr);
+      if (preview.m.kind === "link") linkHint(normal, preview.m, scale * dpr);
     }
     // snap target under the pointer (device space, fixed size)
     const sm = controller.snapMark;

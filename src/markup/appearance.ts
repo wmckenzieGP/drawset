@@ -603,12 +603,19 @@ export function buildAppearance(m: Markup): Appearance {
     case "erase":
       ops.push(...redactOps(m));
       break;
+    case "link": {
+      // the border sits inside the link area, which stays exactly the frame
+      const h = s.width / 2;
+      const r: Rect = [m.rect[0] + h, m.rect[1] + h, m.rect[2] - h, m.rect[3] - h];
+      if (stroke && r[2] > r[0] && r[3] > r[1]) ops.push({ t: "path", segs: rectSegs(r), fill: null, stroke, width: s.width, dash: s.dash });
+      break;
+    }
     case "foreign":
       break;
   }
   // box kinds keep /Rect equal to their frame so the frame survives save and reopen exactly
   // (for redactions /Rect is the area to remove, so it must be exactly the frame)
-  const frameIsBox = m.kind === "textbox" || m.kind === "stamp" || m.kind === "image" || m.kind === "note" || m.kind === "redact" || m.kind === "erase";
+  const frameIsBox = m.kind === "textbox" || m.kind === "stamp" || m.kind === "image" || m.kind === "note" || m.kind === "redact" || m.kind === "erase" || m.kind === "link";
   return { ops, bbox: frameIsBox ? m.rect : opsBounds(ops, m), opacity: s.opacity, blend };
 }
 

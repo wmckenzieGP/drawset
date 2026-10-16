@@ -9,6 +9,8 @@ import { engine } from "../../engine/client";
 import { apply, normRect, rectPoints, snapAngle, snapSquare, type Pt, type Quad, type Rect, dist, rectContains, transformRect } from "../../markup/geometry";
 import { markupBounds } from "../../markup/appearance";
 import { clickField } from "../forms/forms";
+import { openLinkDialog } from "../links/LinkDialog";
+import { describeTarget, followLink } from "../links/navigate";
 import { canResize, hitTest, scaleBetween, setVertex, translate, vertexHandles, withDerivedRect } from "../../markup/edit";
 import { KIND_LABELS, nowIso, type Markup, type MarkupKind } from "../../markup/model";
 import { commit, flash, updateTab, useApp, withMarkups, type DocTab, type ToolId } from "../../state/store";
@@ -17,7 +19,7 @@ import { isMeasure } from "../../markup/measure";
 import { pageAt, type Layout, type PageLayout } from "./layout";
 import { markupsInRect } from "./markupIndex";
 
-export const useInteraction = create<{ editingId: string | null; cursor: string; spaceDown: boolean }>(() => ({ editingId: null, cursor: "default", spaceDown: false }));
+export const useInteraction = create<{ editingId: string | null; cursor: string; spaceDown: boolean; title: string }>(() => ({ editingId: null, cursor: "default", spaceDown: false, title: "" }));
 
 export interface ViewerHost {
   tab(): DocTab | null;
@@ -56,8 +58,8 @@ export const useLabelRegionPick = create<{ pick: { pageId: string; rect: Rect } 
 export const useCalibrationPick = create<{ pick: { pageId: string; a: Pt; b: Pt } | null }>(() => ({ pick: null }));
 
 /** Tools whose points snap. Freehand, text and zoom tools do not. */
-const SNAP_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "textbox", "callout", "note", "stamp", "image", "length", "polylength", "area", "perimeter", "count", "angle", "calibrate", "cutout", "redact", "erase", "chest"]);
-const BOX_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "textbox", "stamp", "image", "zoom", "redact", "erase", "labelregion"]);
+const SNAP_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "textbox", "callout", "note", "stamp", "image", "length", "polylength", "area", "perimeter", "count", "angle", "calibrate", "cutout", "redact", "erase", "chest", "link"]);
+const BOX_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "textbox", "stamp", "image", "zoom", "redact", "erase", "labelregion", "link"]);
 const TEXT_TOOLS = new Set<ToolId>(["text", "highlight", "underline", "strikeout"]);
 
 export class Controller {
@@ -272,6 +274,11 @@ export class Controller {
       }
       const p = this.toPage(page, c);
       const hit = this.hitAt(tab, page, p);
+      // a plain click follows a link; Shift or Ctrl selects it (or use the Link tool to move and resize links)
+      if (hit?.kind === "link" && hit.link && !e.shiftKey && !e.ctrlKey && !e.metaKey && !tab.selection.includes(hit.id)) {
+        void followLink(tab, hit.link);
+        return;
+      }
       if (hit) {
         let sel = tab.selection;
         if (e.shiftKey || e.ctrlKey || e.metaKey) {
@@ -295,6 +302,15 @@ export class Controller {
 
     if (!page) return;
     const raw = this.toPage(page, c);
+    if (tool === "link") {
+      // with the Link tool, existing links are selected and moved instead of followed
+      const hit = this.hitAt(tab, page, raw);
+      if (hit?.kind === "link") {
+        if (!tab.selection.includes(hit.id)) this.setSelection([hit.id]);
+        this.drag = { t: "move", page, start: raw, last: raw, originals: hit.locked ? [] : [hit], moved: false };
+        return;
+      }
+    }
     const p = SNAP_TOOLS.has(tool) ? this.snapAt(page, raw, e) : raw;
     if (BOX_TOOLS.has(tool)) {
       this.drag = { t: "box", kind: tool as MarkupKind | "zoom" | "labelregion", page, a: p, b: p, moved: false };
@@ -441,6 +457,7 @@ export class Controller {
   private updateHover(c: Pt) {
     const tool = this.tool;
     let cursor = "default";
+    let title = "";
     if (useInteraction.getState().spaceDown || tool === "pan") cursor = "grab";
     else if (tool === "zoom") cursor = "zoom-in";
     else if (TEXT_TOOLS.has(tool)) cursor = "text";
@@ -451,10 +468,14 @@ export class Controller {
       else {
         const tab = this.host.tab();
         const page = pageAt(this.host.layout(), c[0], c[1]);
-        if (tab && page && this.hitAt(tab, page, this.toPage(page, c))) cursor = "move";
+        const hit = tab && page ? this.hitAt(tab, page, this.toPage(page, c)) : null;
+        if (hit?.kind === "link" && hit.link && !tab!.selection.includes(hit.id)) {
+          cursor = "pointer";
+          title = [hit.contents, describeTarget(tab!, hit.link)].filter(Boolean).join("\n");
+        } else if (hit) cursor = "move";
       }
     }
-    if (useInteraction.getState().cursor !== cursor) useInteraction.setState({ cursor });
+    if (useInteraction.getState().cursor !== cursor || useInteraction.getState().title !== title) useInteraction.setState({ cursor, title });
   }
 
   pointerUp(e: PointerEvent) {
@@ -493,6 +514,10 @@ export class Controller {
         if (d.kind === "labelregion") {
           if (d.moved) useLabelRegionPick.setState({ pick: { pageId: pid, rect: normRect([d.a[0], d.a[1], d.b[0], d.b[1]]) } });
           useApp.setState((s) => ({ tools: { ...s.tools, tool: "select", chest: null } }));
+          break;
+        }
+        if (d.kind === "link") {
+          if (d.moved) openLinkDialog({ pageId: pid, rect: normRect([d.a[0], d.a[1], d.b[0], d.b[1]]) });
           break;
         }
         if (d.kind === "zoom") {

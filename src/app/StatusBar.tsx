@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { activeTab, scrollToPage, setSnap, setView, useApp } from "../state/store";
+import { activeTab, setSnap, setView, useApp } from "../state/store";
+import { goBack, goForward, jumpTo } from "../features/links/navigate";
+import { Icon } from "./icons";
 import { clampScale } from "../features/viewer/Viewer";
 
 /** Finds a page by number ("12") or by label ("M-012"); returns the page index or -1. */
@@ -32,11 +34,17 @@ export function StatusBar() {
   const markupCount = Object.keys(tab.state.markups).length;
   return (
     <div className="statusbar">
+      <button className="icon-btn" onClick={() => goBack(tab.key)} disabled={!tab.nav.back.length} title="Previous view (Alt+Left)" data-testid="nav-back">
+        <Icon name="back" size={14} />
+      </button>
+      <button className="icon-btn" onClick={() => goForward(tab.key)} disabled={!tab.nav.fwd.length} title="Next view (Alt+Right)" data-testid="nav-forward">
+        <Icon name="forward" size={14} />
+      </button>
       <form
         onSubmit={(e) => {
           e.preventDefault();
           const idx = findPage(goto ?? "", labels);
-          if (idx >= 0) scrollToPage(tab.key, idx);
+          if (idx >= 0) jumpTo(tab.key, idx);
           else useApp.setState({ message: { text: `No page "${goto}"`, kind: "error" } });
           setGoto(null);
         }}

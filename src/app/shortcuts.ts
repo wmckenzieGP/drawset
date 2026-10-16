@@ -1,3 +1,4 @@
+import { goBack, goForward } from "../features/links/navigate";
 import { useEffect } from "react";
 import { useApp, type ToolId } from "../state/store";
 import { useInteraction } from "../features/viewer/controller";
@@ -35,6 +36,7 @@ const SHIFT_TOOL_KEYS: Record<string, ToolId> = {
   p: "perimeter",
   c: "count",
   g: "angle",
+  h: "link",
 };
 
 export function useShortcuts() {
@@ -80,6 +82,8 @@ export function useShortcuts() {
         return;
       }
       if (e.altKey && k === "l") return run(() => useApp.setState((s) => ({ bottomPanel: !s.bottomPanel })));
+      if (e.altKey && e.key === "ArrowLeft") return run(() => goBack());
+      if (e.altKey && e.key === "ArrowRight") return run(() => goForward());
       if (e.altKey) return;
       if (e.key === "Delete" || e.key === "Backspace") return run(cmd.deleteSelection);
       if (e.key === "Escape") {

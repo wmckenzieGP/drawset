@@ -130,6 +130,8 @@ export function hitTest(m: Markup, p: Pt, tol: number): boolean {
       const d = Math.hypot((p[0] - cx) / (rx || 1), (p[1] - cy) / (ry || 1));
       return Math.abs(d - 1) * Math.min(rx, ry) <= w;
     }
+    case "link":
+      return true;
     case "callout": {
       const r = m.rect;
       if (p[0] >= r[0] - tol && p[0] <= r[2] + tol && p[1] >= r[1] - tol && p[1] <= r[3] + tol) return true;

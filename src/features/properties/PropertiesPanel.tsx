@@ -1,3 +1,5 @@
+import { openLinkDialog } from "../links/LinkDialog";
+import { describeTarget, followLink } from "../links/navigate";
 import { ReplyThread } from "../replies/ReplyThread";
 import { useEffect, useState } from "react";
 import { colourHex, FONT_FAMILIES, formatDate, hexColour, KIND_LABELS, LINE_ENDS, nowIso, STATUSES, type Markup, type MarkupKind, type MarkupStyle, type ReviewStatus } from "../../markup/model";
@@ -6,12 +8,12 @@ import { commit, defaultStyleFor, useApp, withMarkups, type DocTab } from "../..
 import { cmd } from "../../app/commands";
 
 const FILL_KINDS = new Set<MarkupKind>(["rectangle", "ellipse", "polygon", "cloud", "textbox", "callout", "line", "arrow", "polyline", "area", "count"]);
-const WIDTH_KINDS = new Set<MarkupKind>(["rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "pen", "highlighter", "textbox", "callout", "length", "polylength", "area", "perimeter", "angle"]);
-const DASH_KINDS = new Set<MarkupKind>(["rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "textbox", "callout", "length", "polylength", "area", "perimeter", "angle"]);
+const WIDTH_KINDS = new Set<MarkupKind>(["link", "rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "pen", "highlighter", "textbox", "callout", "length", "polylength", "area", "perimeter", "angle"]);
+const DASH_KINDS = new Set<MarkupKind>(["link", "rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "textbox", "callout", "length", "polylength", "area", "perimeter", "angle"]);
 const END_KINDS = new Set<MarkupKind>(["line", "arrow", "polyline", "length", "polylength"]);
 const MEASURE_KINDS = new Set<MarkupKind>(["length", "polylength", "area", "perimeter", "count", "angle"]);
 const TEXT_KINDS = new Set<MarkupKind>(["textbox", "callout"]);
-const COLOUR_KINDS = new Set<MarkupKind>(["rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "pen", "highlighter", "textbox", "callout", "note", "highlight", "underline", "strikeout", "stamp", "length", "polylength", "area", "perimeter", "count", "angle"]);
+const COLOUR_KINDS = new Set<MarkupKind>(["link", "rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "pen", "highlighter", "textbox", "callout", "note", "highlight", "underline", "strikeout", "stamp", "length", "polylength", "area", "perimeter", "count", "angle"]);
 
 const DASHES: { label: string; value: number[] | null }[] = [
   { label: "Solid", value: null },
@@ -59,7 +61,7 @@ function StyleEditor({ kinds, style, onStyle }: { kinds: MarkupKind[]; style: Ma
   const all = (set: Set<MarkupKind>) => kinds.every((k) => set.has(k));
   return (
     <>
-      {all(COLOUR_KINDS) && <ColourField label={kinds.every((k) => TEXT_KINDS.has(k)) ? "Border colour" : "Colour"} value={style.color} allowNone={kinds.every((k) => TEXT_KINDS.has(k) || k === "rectangle" || k === "ellipse" || k === "polygon")} onChange={(v) => onStyle({ color: v }, "colour")} testId="prop-colour" />}
+      {all(COLOUR_KINDS) && <ColourField label={kinds.every((k) => TEXT_KINDS.has(k)) ? "Border colour" : "Colour"} value={style.color} allowNone={kinds.every((k) => TEXT_KINDS.has(k) || k === "rectangle" || k === "ellipse" || k === "polygon" || k === "link")} onChange={(v) => onStyle({ color: v }, "colour")} testId="prop-colour" />}
       {all(FILL_KINDS) && <ColourField label={kinds.every((k) => END_KINDS.has(k)) ? "Arrowhead fill" : "Fill"} value={style.fill} allowNone onChange={(v) => onStyle({ fill: v }, "fill")} testId="prop-fill" />}
       <label className="prop-row">
         <span>Opacity</span>
@@ -179,6 +181,17 @@ export function PropertiesPanel({ tab }: { tab: DocTab }) {
         </div>
         {styleKinds.length === kinds.length && !first.keepAppearance && <StyleEditor kinds={styleKinds} style={first.style} onStyle={(patch, tag) => update("Change properties", (m) => fitText({ ...m, style: { ...m.style, ...patch } }), tag)} />}
         <div className="prop-sep" />
+        {selected.length === 1 && first.kind === "link" && (
+          <div className="prop-row link-target">
+            <span>Goes to</span>
+            <button className="link-go" onClick={() => first.link && followLink(tab, first.link)} title="Follow the link" data-testid="prop-link-target">
+              {describeTarget(tab, first.link)}
+            </button>
+            <button className="btn small" onClick={() => openLinkDialog({ editId: first.id })} disabled={first.locked} data-testid="prop-link-edit">
+              Change…
+            </button>
+          </div>
+        )}
         {selected.length === 1 && (
           <>
             <TextField label={TEXT_KINDS.has(first.kind) ? "Text" : "Comment"} value={first.contents} multiline onCommit={(v) => update("Edit comment", (m) => fitText({ ...m, contents: v }))} testId="prop-comment" />

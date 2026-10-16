@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { OutlineNode } from "../../engine/types";
-import { scrollToPage, type DocTab } from "../../state/store";
+import type { DocTab } from "../../state/store";
+import { followLink, jumpTo } from "../links/navigate";
 
 function Node({ tab, node, depth }: { tab: DocTab; node: OutlineNode; depth: number }) {
   const [open, setOpen] = useState(depth < 1);
@@ -16,7 +17,7 @@ function Node({ tab, node, depth }: { tab: DocTab; node: OutlineNode; depth: num
         ) : (
           <span className="bm-toggle" />
         )}
-        <button className="bm-title" disabled={index < 0 && !node.uri} onClick={() => (index >= 0 ? scrollToPage(tab.key, index) : node.uri && window.open(node.uri, "_blank"))} title={node.title}>
+        <button className="bm-title" disabled={index < 0 && !node.uri} onClick={() => (index >= 0 ? jumpTo(tab.key, index) : node.uri && followLink(tab, { type: "url", url: node.uri }))} title={node.title}>
           {node.title || "(untitled)"}
         </button>
       </div>

@@ -34,6 +34,7 @@ const GROUPS: [ToolId, string, string][][] = [
     ["highlight", "Text highlight (I)", "highlight"],
     ["underline", "Underline (U)", "underline"],
     ["strikeout", "Strikethrough (K)", "strikeout"],
+    ["link", "Link (Shift+H): drag an area that goes to a page, a file or a web address", "link"],
   ],
   [
     ["calibrate", "Calibrate: drag along a known dimension (Shift+K)", "calibrate"],

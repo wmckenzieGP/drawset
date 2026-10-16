@@ -73,6 +73,7 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
   const [, bump] = useReducer((x: number) => x + 1, 0);
   const editingId = useInteraction((s) => s.editingId);
   const cursor = useInteraction((s) => s.cursor);
+  const hoverTitle = useInteraction((s) => s.title);
   const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
   const tabRef = useRef(tab);
   tabRef.current = tab;
@@ -366,6 +367,7 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
         onDoubleClick={(e) => controller.doubleClick(e.nativeEvent)}
         onContextMenu={(e) => e.preventDefault()}
         style={{ cursor }}
+        title={hoverTitle || undefined}
       >
         <div className="viewer-content" style={{ width: layout.width, height: layout.height }}>
           {visiblePages.map((p) => (

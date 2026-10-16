@@ -102,7 +102,7 @@ export const cmd = {
   flatten: async () => {
     const t = activeTab();
     if (!t) return;
-    const count = Object.keys(t.state.markups).length;
+    const count = Object.values(t.state.markups).filter((m) => m.kind !== "link").length;
     if (!count) {
       flash("There are no markups to flatten.");
       return;

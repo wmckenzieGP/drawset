@@ -3,6 +3,8 @@ import { RedactDialog, openRedactDialog } from "../features/redact/RedactDialog"
 import { FormsPanel } from "../features/forms/FormsPanel";
 import { flattenForms } from "../features/forms/forms";
 import { ToolChestPanel, addSelectionToChest } from "../features/toolchest/ToolChestPanel";
+import { LinkDialog } from "../features/links/LinkDialog";
+import { goBack, goForward } from "../features/links/navigate";
 import { HeaderFooterDialog, openHeaderFooter } from "../features/headerFooter/HeaderFooterDialog";
 import { LabelRegionDialog, startLabelRegion } from "../features/pages/LabelRegionDialog";
 import { bookmarksFromLabels } from "../features/pages/labelRegion";
@@ -84,7 +86,7 @@ const TOOL_MENU: { group: string; tools: [ToolId, string, string?][] }[] = [
   { group: "Navigate", tools: [["select", "Select", "V"], ["pan", "Pan", "H"], ["zoom", "Marquee zoom", "Z"], ["text", "Select text", "T"]] },
   { group: "Shapes", tools: [["rectangle", "Rectangle", "R"], ["ellipse", "Ellipse", "E"], ["line", "Line", "L"], ["arrow", "Arrow", "A"], ["polyline", "Polyline", "N"], ["polygon", "Polygon", "P"], ["cloud", "Cloud", "C"]] },
   { group: "Freehand", tools: [["pen", "Pen", "F"], ["highlighter", "Highlighter", "G"]] },
-  { group: "Text", tools: [["textbox", "Text box", "X"], ["callout", "Callout", "Q"], ["note", "Note", "O"], ["highlight", "Text highlight", "I"], ["underline", "Underline", "U"], ["strikeout", "Strikethrough", "K"]] },
+  { group: "Text", tools: [["textbox", "Text box", "X"], ["callout", "Callout", "Q"], ["note", "Note", "O"], ["highlight", "Text highlight", "I"], ["underline", "Underline", "U"], ["strikeout", "Strikethrough", "K"], ["link", "Link", "Shift+H"]] },
   { group: "Stamps", tools: [["stamp", "Stamp", "S"], ["image", "Image"]] },
   {
     group: "Measure",
@@ -139,6 +141,9 @@ function MenuBar() {
         <Item label="Actual size" shortcut="Ctrl+1" onSelect={cmd.actualSize} disabled={!has} />
         <Item label="Fit page" shortcut="Ctrl+0" onSelect={cmd.fitPage} disabled={!has} />
         <Item label="Fit width" shortcut="Ctrl+2" onSelect={cmd.fitWidth} disabled={!has} />
+        <Sep />
+        <Item label="Previous view" shortcut="Alt+Left" onSelect={() => goBack()} disabled={!tab?.nav.back.length} />
+        <Item label="Next view" shortcut="Alt+Right" onSelect={() => goForward()} disabled={!tab?.nav.fwd.length} />
         <Sep />
         <Item label="Rotate view clockwise" shortcut="Ctrl+Shift++" onSelect={() => cmd.rotateView(90)} disabled={!has} />
         <Item label="Rotate view anticlockwise" shortcut="Ctrl+Shift+-" onSelect={() => cmd.rotateView(-90)} disabled={!has} />
@@ -370,6 +375,7 @@ export function App() {
       <OverlayDialog />
       <LabelRegionDialog />
       <HeaderFooterDialog />
+      <LinkDialog />
       <PreferencesDialog />
       {dragOver && <div className="drop-hint">Drop PDF files to open them</div>}
     </div>

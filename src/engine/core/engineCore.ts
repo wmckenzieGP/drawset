@@ -7,7 +7,7 @@ import { concat, displayMatrix, type Matrix, type Pt, type Quad, type Rect, scal
 import type { Markup } from "../../markup/model";
 import type { Decoration, DocInfo, FormField, ImagePdfPage, SnapGeometry, MarkupRecord, OutlineNode, PageInfo, RenderRequest, SavePlan, SearchHit } from "../types";
 import { readPageMarkups } from "./annotRead";
-import { deleteAnnotationTree, ensurePopup, invertCtm, PRIVATE_KEY, subtypeFor, writeMarkup, writeReplies, writeStatus, type WriteContext } from "./annotWrite";
+import { deleteAnnotationTree, ensurePopup, invertCtm, PRIVATE_KEY, subtypeFor, writeLink, writeMarkup, writeReplies, writeStatus, type WriteContext } from "./annotWrite";
 import { buildImagePdf } from "./imagePdf";
 import { collectSnapGeometry } from "./snapGeometry";
 import { readFields, setFieldValues } from "./forms";
@@ -350,7 +350,17 @@ export class EngineCore {
       const ctx: WriteContext = { doc, page, toUser: invertCtm(page.getTransform() as Matrix), defaultAuthor: plan.defaultAuthor };
       const existing = new Map<number, mupdf.PDFAnnotation>();
       for (const a of page.getAnnotations()) existing.set(a.getObject().asIndirect(), a);
+      const onPage = new Set<number>();
+      const annotsArr = page.getObject().get("Annots");
+      if (annotsArr.isArray()) for (let k = 0; k < annotsArr.length; k++) if (annotsArr.get(k).isIndirect()) onPage.add(annotsArr.get(k).asIndirect());
       for (const { markup } of items) {
+        if (markup.kind === "link") {
+          const obj = markup.objNum !== undefined && onPage.has(markup.objNum) ? doc.newIndirect(markup.objNum) : page.createAnnotation("Link").getObject();
+          writeLink(ctx, obj.resolve(), markup);
+          writeStatus(ctx, obj, markup);
+          writeReplies(ctx, obj, markup);
+          continue;
+        }
         let annot = markup.objNum !== undefined ? existing.get(markup.objNum) : undefined;
         if (annot && annot.getType() !== subtypeFor(markup) && markup.kind !== "foreign") {
           // subtype changed (e.g. text box ↔ note never happens, but be safe): replace

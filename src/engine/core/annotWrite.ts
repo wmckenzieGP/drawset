@@ -4,6 +4,7 @@
  * The appearance stream is set last with setAppearance so MuPDF never replaces it with its own.
  */
 import * as mupdf from "mupdf";
+import { writeLinkTarget } from "./links";
 import { apply, inflate, invert, type Matrix, type Pt, transformRect } from "../../markup/geometry";
 import { buildAppearance, calloutLeader, type TextFont } from "../../markup/appearance";
 import { appearanceToPdf, FONT_RESOURCE } from "../../markup/pdfAppearance";
@@ -57,6 +58,8 @@ export function subtypeFor(m: Markup): mupdf.PDFAnnotationType {
     case "redact":
     case "erase":
       return "Redact";
+    case "link":
+      return "Link";
     case "foreign":
       return m.subtype as mupdf.PDFAnnotationType;
   }
@@ -390,6 +393,27 @@ export function writeMarkup(ctx: WriteContext, annot: mupdf.PDFAnnotation, m: Ma
   annot.setAppearance(null, null, mupdf.Matrix.identity, rect, resources, pdf.content);
   // setAppearance may adjust /Rect; keep ours exactly
   obj.put("Rect", nums(doc, rect));
+}
+
+/**
+ * Writes a link into its dictionary. MuPDF keeps links out of its annotation list for loaded pages, so this
+ * works on the object directly; the appearance (a border, when there is one) is written by hand.
+ */
+export function writeLink(ctx: WriteContext, obj: mupdf.PDFObject, m: Markup) {
+  const { doc } = ctx;
+  putCommon(ctx, obj, m);
+  putPrivate(ctx, obj, m);
+  putColour(ctx, obj, "C", m.style.color);
+  putBorder(ctx, obj, m);
+  // the older /Border array too: without it some viewers draw a default black border
+  obj.put("Border", nums(doc, [0, 0, m.style.color ? m.style.width : 0]));
+  obj.put("H", doc.newName("I"));
+  if (m.link) writeLinkTarget(doc, obj, m.link);
+  const pdf = appearanceToPdf(buildAppearance(m), ctx.toUser);
+  obj.put("Rect", nums(doc, pdf.bbox));
+  if (m.style.color && pdf.content.trim()) {
+    obj.put("AP", { N: doc.addStream(pdf.content, { Type: doc.newName("XObject"), Subtype: doc.newName("Form"), BBox: nums(doc, pdf.bbox) }) });
+  } else obj.delete("AP");
 }
 
 /** New annotation reusing another annotation's normal appearance, scaled into the markup's rect. */
