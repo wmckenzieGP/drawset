@@ -3,6 +3,7 @@ import { RedactDialog, openRedactDialog } from "../features/redact/RedactDialog"
 import { FormsPanel } from "../features/forms/FormsPanel";
 import { flattenForms } from "../features/forms/forms";
 import { ToolChestPanel, addSelectionToChest } from "../features/toolchest/ToolChestPanel";
+import { HeaderFooterDialog, openHeaderFooter } from "../features/headerFooter/HeaderFooterDialog";
 import { LabelRegionDialog, startLabelRegion } from "../features/pages/LabelRegionDialog";
 import { bookmarksFromLabels } from "../features/pages/labelRegion";
 import { OverlayDialog, openOverlayDialog } from "../features/overlay/OverlayDialog";
@@ -186,6 +187,8 @@ function MenuBar() {
         <Sep />
         <Item label="Label pages from title block…" onSelect={startLabelRegion} disabled={!has} />
         <Item label="Make bookmarks from page labels" onSelect={() => tab && commit(tab.key, "Make bookmarks", (s) => ({ ...s, outline: bookmarksFromLabels(s) }))} disabled={!has} />
+        <Sep />
+        <Item label="Headers, footers and watermark…" onSelect={openHeaderFooter} disabled={!has} />
       </TopMenu>
     </div>
   );
@@ -366,6 +369,7 @@ export function App() {
       <RedactDialog />
       <OverlayDialog />
       <LabelRegionDialog />
+      <HeaderFooterDialog />
       <PreferencesDialog />
       {dragOver && <div className="drop-hint">Drop PDF files to open them</div>}
     </div>

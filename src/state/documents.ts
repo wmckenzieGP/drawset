@@ -1,6 +1,7 @@
 /** Opening, saving and closing documents: glue between the store, the engine and the host. */
 import { engine } from "../engine/client";
-import type { SavePlan } from "../engine/types";
+import type { Decoration, SavePlan } from "../engine/types";
+import { currentSpec, decorationsFor, specJson } from "../features/headerFooter/hf";
 import { sameScale } from "../markup/measure";
 import { openPdfDialog, rememberRecentName, readPath, saveAs, saveInPlace, setDirty, type OpenedFile } from "../platform/host";
 import { renderCache } from "../features/viewer/renderCache";
@@ -92,6 +93,52 @@ useApp.subscribe((s, prev) => {
   }
 });
 
+/** Each physical page's decoration (as JSON) that the engine document currently holds, per document. */
+const appliedDecor = new Map<string, Map<number, string>>();
+
+const appliedSpec = new Map<string, string | null>();
+
+const decorKey = (d: Decoration | null) => (d ? JSON.stringify(d) : "");
+
+/** What the file itself holds: its saved settings applied to its own pages. */
+function fileDecorations(t: DocTab): Map<number, string> {
+  const saved = decorationsFor(t, { ...t.saved, headerFooter: undefined });
+  return new Map([...saved].map(([k, v]) => [k, decorKey(v)]));
+}
+
+// headers, footers and watermarks follow the undoable state (and page order, labels and rotation)
+useApp.subscribe((s, prev) => {
+  for (const t of s.tabs) {
+    const before = prev.tabs.find((x) => x.key === t.key);
+    if (before && before.state === t.state) continue;
+    const spec = currentSpec(t);
+    if (!spec && !appliedDecor.has(t.docId) && !t.info.headerFooter) continue;
+    const applied = appliedDecor.get(t.docId) ?? fileDecorations(t);
+    const want = decorationsFor(t);
+    const pages: Record<number, Decoration | null> = {};
+    const next = new Map(applied);
+    for (const [src, d] of want) {
+      const k = decorKey(d);
+      if ((applied.get(src) ?? "") === k) continue;
+      pages[src] = d;
+      next.set(src, k);
+    }
+    const json = specJson(spec);
+    const specChanged = json !== (appliedSpec.get(t.docId) ?? t.info.headerFooter);
+    if (!Object.keys(pages).length && !specChanged) continue;
+    appliedDecor.set(t.docId, next);
+    appliedSpec.set(t.docId, json);
+    engine()
+      .setDecorations(t.docId, pages, json)
+      .then((changed) => {
+        if (changed.length) {
+          renderCache.refreshDoc(t.docId, new Set(changed));
+          forgetContentIndexes(t.docId);
+        }
+      })
+      .catch((e) => flash(`Could not update headers and footers: ${(e as Error).message}`, "error"));
+  }
+});
 /** Builds the save plan: what changed since the last save. */
 export interface SaveOptions {
   flatten?: boolean;
@@ -151,6 +198,8 @@ export async function saveTab(key: string, opts: SaveOptions = {}): Promise<bool
     forgetContentIndexes(t.docId);
     const fields = res.info.hasForm ? await engine().formFields(t.docId) : null;
     appliedFields.delete(t.docId);
+    appliedDecor.delete(t.docId);
+    appliedSpec.delete(t.docId);
     const path = await saveInPlace(t.path, t.name, res.bytes);
     const pages = pagesFromInfo(res.info);
     const state: DocState = { pages, markups: recordsToMarkups(res.markups, pages) };
@@ -214,6 +263,8 @@ export async function closeTab(key: string, force = false): Promise<boolean> {
     return { tabs, active };
   });
   appliedFields.delete(t.docId);
+  appliedDecor.delete(t.docId);
+  appliedSpec.delete(t.docId);
   await engine().close(t.docId);
   return true;
 }

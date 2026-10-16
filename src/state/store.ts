@@ -3,6 +3,7 @@
  * Every document change goes through `commit`, which records a snapshot for undo/redo.
  */
 import type { ChestTool } from "../features/toolchest/chest";
+import type { HFSpec } from "../features/headerFooter/hf";
 import { create } from "zustand";
 import type { DocInfo, FormField, MarkupRecord, OutlineNode, PageInfo, SearchHit } from "../engine/types";
 import type { Quad, Rect } from "../markup/geometry";
@@ -29,6 +30,8 @@ export interface DocState {
   markups: Record<string, Markup>;
   /** Replacement bookmarks; undefined keeps the file's. Pages are physical indices. */
   outline?: OutlineNode[];
+  /** Header, footer and watermark settings; undefined keeps the file's, null removes them. */
+  headerFooter?: HFSpec | null;
   /** Form field values changed since the file was opened or saved, by field name. */
   fields?: Record<string, string>;
 }

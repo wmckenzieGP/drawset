@@ -35,6 +35,8 @@ export interface DocInfo {
   title: string;
   canSaveIncrementally: boolean;
   hasForm: boolean;
+  /** Drawset header and footer settings saved in the file (JSON), or null. */
+  headerFooter: string | null;
 }
 
 export interface Bitmap {
@@ -102,6 +104,21 @@ export interface SaveResult {
   markups: MarkupRecord[];
 }
 
+export type HFPosition = "tl" | "tc" | "tr" | "bl" | "bc" | "br";
+
+/** One page's headers, footers and watermark, with variables already filled in. */
+export interface Decoration {
+  /** Rotation the page will be shown at (the file's plus any page rotation not yet saved). */
+  rotate: number;
+  items: { pos: HFPosition; text: string }[];
+  fontSize: number;
+  colour: [number, number, number];
+  /** Distance from the page edge, points. */
+  margin: number;
+  /** fontSize 0 fits the text across the page. */
+  watermark: { text: string; fontSize: number; colour: [number, number, number]; opacity: number; angle: number } | null;
+}
+
 export type FormFieldType = "text" | "checkbox" | "radio" | "choice" | "button" | "signature";
 
 /** A form field (all widgets sharing one fully qualified name). */
@@ -158,6 +175,8 @@ export interface PdfEngine {
   save(docId: string, plan: SavePlan, mode: "incremental" | "full"): Promise<SaveResult>;
   /** Writes the plan into a copy and returns its bytes; the open document is unchanged. */
   saveCopy(docId: string, plan: SavePlan): Promise<Uint8Array>;
+  /** Replaces Drawset's headers, footers and watermark on pages (physical index; null removes); returns pages changed. */
+  setDecorations(docId: string, pages: Record<number, Decoration | null>, spec: string | null): Promise<number[]>;
   /** The document's form fields. */
   formFields(docId: string): Promise<FormField[]>;
   /** Fills fields in the open document (by name); returns the physical pages that changed. */

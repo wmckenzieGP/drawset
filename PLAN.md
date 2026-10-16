@@ -43,7 +43,7 @@ Each item is about 2 hours or less. Tick `[x]` when its acceptance criteria pass
 - [x] T3.2 Split view with synced pan, zoom and page. *Accept:* scrolling or zooming one pane moves the other to the same page, spot and zoom; sync can be turned off.
 - [x] T3.3 Page labels from a title-block region; bookmarks from labels. *Accept:* every sheet of the 200-page set is labelled from its title block; /PageLabels and /Outlines read back in MuPDF and pdf.js.
 - [x] T3.4 Forms: fill, save, flatten. *Accept:* text, check box, choice and radio fields filled in Drawset read back with the same values and appearances in MuPDF and pdf.js; flattening leaves no widgets and the page looks the same.
-- [ ] T3.5 Headers, footers and watermarks with date, file name, page label and "page n of N" variables.
+- [x] T3.5 Headers, footers and watermarks with date, file name, page label and "page n of N" variables. *Accept:* text at the six positions and a diagonal watermark appear on every chosen page in MuPDF and pdf.js with the right page numbers and labels; they follow page moves, can be removed, and the original content streams are untouched.
 - [ ] T3.6 Hyperlinks: link an area to a page, a file or a URL, with back navigation.
 - [ ] T3.7 Security: add or remove an open password and permission restrictions.
 - [ ] T3.8 Crash recovery: journal unsaved markups every 60 s and offer to restore after a crash.

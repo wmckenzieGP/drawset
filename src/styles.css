@@ -1220,3 +1220,53 @@ input.small {
 .form-summary {
   margin: 0 4px 6px;
 }
+
+/* headers and footers */
+.hf-dialog {
+  width: min(640px, 94vw);
+  max-height: 92vh;
+  overflow-y: auto;
+}
+.hf-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0 10px;
+}
+.hf-grid input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.hf-sample {
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hf-vars,
+.hf-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-bottom: 10px;
+}
+.hf-vars {
+  gap: 6px;
+}
+.hf-wm {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 10px 2px;
+  margin: 0 0 10px;
+}
+.hf-wm legend {
+  padding: 0 4px;
+}
+.hf-row input[type="color"] {
+  width: 32px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line);
+  background: none;
+  vertical-align: middle;
+}

@@ -5,12 +5,13 @@
 import * as mupdf from "mupdf";
 import { concat, displayMatrix, type Matrix, type Pt, type Quad, type Rect, scaleM, transformRect, translateM } from "../../markup/geometry";
 import type { Markup } from "../../markup/model";
-import type { DocInfo, FormField, ImagePdfPage, SnapGeometry, MarkupRecord, OutlineNode, PageInfo, RenderRequest, SavePlan, SearchHit } from "../types";
+import type { Decoration, DocInfo, FormField, ImagePdfPage, SnapGeometry, MarkupRecord, OutlineNode, PageInfo, RenderRequest, SavePlan, SearchHit } from "../types";
 import { readPageMarkups } from "./annotRead";
 import { deleteAnnotationTree, ensurePopup, invertCtm, PRIVATE_KEY, subtypeFor, writeMarkup, writeReplies, writeStatus, type WriteContext } from "./annotWrite";
 import { buildImagePdf } from "./imagePdf";
 import { collectSnapGeometry } from "./snapGeometry";
 import { readFields, setFieldValues } from "./forms";
+import { readDecorationSpec, setDecorations } from "./decorations";
 import { textInRect, writeOutline, writePageLabels } from "./labels";
 import { safePageScale, writePageScale } from "./measureDict";
 
@@ -183,6 +184,7 @@ export class EngineCore {
       outline,
       title,
       canSaveIncrementally: doc.canBeSavedIncrementally(),
+      headerFooter: readDecorationSpec(doc),
       hasForm: acro.isDictionary() && acro.get("Fields").isArray() && acro.get("Fields").length > 0,
     };
   }
@@ -420,6 +422,13 @@ export class EngineCore {
     const bytes = d.doc.saveToBuffer(incremental ? "incremental" : "compress,garbage=compact").asUint8Array().slice();
     const info = this.open(bytes, d.name, docId);
     return { bytes, info, markups: this.readMarkups(docId) };
+  }
+
+  setDecorations(docId: string, pages: Record<number, Decoration | null>, spec: string | null): number[] {
+    const d = this.get(docId);
+    const changed = setDecorations(d.doc, pages, spec);
+    if (changed.length) this.dropCaches(d);
+    return changed;
   }
 
   formFields(docId: string): FormField[] {

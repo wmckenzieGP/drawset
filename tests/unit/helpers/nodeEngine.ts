@@ -25,6 +25,7 @@ export function useNodeEngine(): EngineCore {
     saveCopy: async (d, p) => core.saveCopy(d, p),
     imagePdf: async (p, t) => core.imagePdf(p, t),
     snapGeometry: async (d, p) => core.snapGeometry(d, p),
+    setDecorations: async (d, p, s) => core.setDecorations(d, p, s),
     formFields: async (d) => core.formFields(d),
     setFieldValues: async (d, v) => core.setFieldValues(d, v),
     textInRect: async (d, p, r) => core.textInRect(d, p, r),

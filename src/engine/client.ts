@@ -1,5 +1,5 @@
 /** Main-thread proxy for the engine worker. All PDF work happens off the UI thread. */
-import type { Bitmap, DocInfo, MarkupRecord, PageInfo, PdfEngine, RenderRequest, SavePlan, SaveResult, SearchHit, ImagePdfPage, SnapGeometry, FormField } from "./types";
+import type { Bitmap, DocInfo, MarkupRecord, PageInfo, PdfEngine, RenderRequest, SavePlan, SaveResult, SearchHit, ImagePdfPage, SnapGeometry, FormField, Decoration } from "./types";
 import type { Pt, Quad, Rect } from "../markup/geometry";
 
 interface Pending {
@@ -74,6 +74,9 @@ export class WorkerEngine implements PdfEngine {
   }
   saveCopy(docId: string, plan: SavePlan) {
     return this.call<Uint8Array>("saveCopy", [docId, plan]);
+  }
+  setDecorations(docId: string, pages: Record<number, Decoration | null>, spec: string | null) {
+    return this.call<number[]>("setDecorations", [docId, pages, spec]);
   }
   formFields(docId: string) {
     return this.call<FormField[]>("formFields", [docId]);
