@@ -106,6 +106,37 @@ export interface AppState {
   bottomPanel: boolean;
   message: { text: string; kind: "info" | "error" } | null;
   busy: string | null;
+  snap: SnapSettings;
+}
+
+export interface SnapSettings {
+  /** Snap to markup vertices. */
+  markups: boolean;
+  /** Snap to the drawing: line end points and intersections. */
+  content: boolean;
+  grid: boolean;
+  /** Grid spacing on paper, millimetres. */
+  gridMm: number;
+}
+
+const DEFAULT_SNAP: SnapSettings = { markups: true, content: true, grid: false, gridMm: 5 };
+
+function loadSnap(): SnapSettings {
+  try {
+    const v = JSON.parse(localStorage.getItem("drawset.snap") ?? "null");
+    return v && typeof v === "object" ? { ...DEFAULT_SNAP, ...v, gridMm: Number(v.gridMm) > 0 ? Number(v.gridMm) : DEFAULT_SNAP.gridMm } : DEFAULT_SNAP;
+  } catch {
+    return DEFAULT_SNAP;
+  }
+}
+
+export function setSnap(patch: Partial<SnapSettings>) {
+  useApp.setState((s) => ({ snap: { ...s.snap, ...patch } }));
+  try {
+    localStorage.setItem("drawset.snap", JSON.stringify(useApp.getState().snap));
+  } catch {
+    /* storage unavailable */
+  }
 }
 
 export const KIND_DEFAULTS: Partial<Record<MarkupKind, Partial<MarkupStyle>>> = {
@@ -149,6 +180,7 @@ export const useApp = create<AppState>(() => ({
   bottomPanel: false,
   message: null,
   busy: null,
+  snap: loadSnap(),
 }));
 
 let tabSeq = 1;

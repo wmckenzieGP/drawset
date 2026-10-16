@@ -132,6 +132,30 @@ export function drawOverlay(p: OverlayParams) {
       const ctx = preview.m.kind === "highlight" || preview.m.kind === "highlighter" || preview.m.kind === "area" ? multiply : normal;
       drawMarkup(ctx, tab, page, preview.m, scale * dpr);
     }
+    // snap target under the pointer (device space, fixed size)
+    const sm = controller.snapMark;
+    if (sm && sm.pageId === page.entry.id) {
+      const x = sm.pt[0] * page.m[0] + sm.pt[1] * page.m[2] + page.m[4] + page.x - p.scrollLeft;
+      const y = sm.pt[0] * page.m[1] + sm.pt[1] * page.m[3] + page.m[5] + page.y - p.scrollTop;
+      normal.save();
+      normal.setTransform(dpr, 0, 0, dpr, 0, 0);
+      normal.strokeStyle = sm.kind === "grid" ? "rgba(120,140,160,0.95)" : "rgba(255,0,200,0.95)";
+      normal.lineWidth = 1.5;
+      normal.beginPath();
+      if (sm.kind === "intersection") {
+        normal.moveTo(x - 5, y - 5);
+        normal.lineTo(x + 5, y + 5);
+        normal.moveTo(x + 5, y - 5);
+        normal.lineTo(x - 5, y + 5);
+      } else if (sm.kind === "grid") {
+        normal.moveTo(x - 5, y);
+        normal.lineTo(x + 5, y);
+        normal.moveTo(x, y - 5);
+        normal.lineTo(x, y + 5);
+      } else normal.rect(x - 4.5, y - 4.5, 9, 9);
+      normal.stroke();
+      normal.restore();
+    }
     // search hits
     const pageHits = hits.filter((h) => h.page === page.entry.src);
     if (pageHits.length) {

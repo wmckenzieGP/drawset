@@ -1091,3 +1091,28 @@ input.small {
   color: inherit;
   cursor: pointer;
 }
+
+.snap-toggles {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.snap-toggles button {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 0 6px;
+  height: 18px;
+  cursor: pointer;
+}
+.snap-toggles button.on {
+  color: var(--text);
+  border-color: var(--line);
+  background: var(--bg-4);
+}
+.snap-toggles select {
+  height: 18px;
+  font-size: 11px;
+}

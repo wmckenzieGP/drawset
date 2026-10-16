@@ -5,6 +5,7 @@ import { sameScale } from "../markup/measure";
 import { openPdfDialog, rememberRecentName, readPath, saveAs, saveInPlace, setDirty, type OpenedFile } from "../platform/host";
 import { renderCache } from "../features/viewer/renderCache";
 import { invalidateApBitmaps } from "../features/viewer/overlay";
+import { forgetContentIndexes } from "../features/viewer/snap";
 import { addTab, activeTab, flash, isDirty, pagesFromInfo, recordsToMarkups, setLoadedMarkups, updateTab, useApp, type DocState, type DocTab } from "./store";
 
 export async function openFiles(files: OpenedFile[]) {
@@ -88,6 +89,7 @@ export async function saveTab(key: string, opts: { flatten?: boolean; applyRedac
     const res = await engine().save(t.docId, plan, "incremental");
     renderCache.invalidateDoc(t.docId);
     invalidateApBitmaps(t.docId);
+    forgetContentIndexes(t.docId);
     const path = await saveInPlace(t.path, t.name, res.bytes);
     const pages = pagesFromInfo(res.info);
     const state: DocState = { pages, markups: recordsToMarkups(res.markups, pages) };

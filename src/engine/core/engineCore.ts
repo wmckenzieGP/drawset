@@ -5,10 +5,11 @@
 import * as mupdf from "mupdf";
 import { concat, displayMatrix, type Matrix, type Pt, type Quad, type Rect, scaleM, transformRect, translateM } from "../../markup/geometry";
 import type { Markup } from "../../markup/model";
-import type { DocInfo, ImagePdfPage, MarkupRecord, OutlineNode, PageInfo, RenderRequest, SavePlan, SearchHit } from "../types";
+import type { DocInfo, ImagePdfPage, SnapGeometry, MarkupRecord, OutlineNode, PageInfo, RenderRequest, SavePlan, SearchHit } from "../types";
 import { readPageMarkups } from "./annotRead";
 import { deleteAnnotationTree, ensurePopup, invertCtm, PRIVATE_KEY, subtypeFor, writeMarkup, writeReplies, writeStatus, type WriteContext } from "./annotWrite";
 import { buildImagePdf } from "./imagePdf";
+import { collectSnapGeometry } from "./snapGeometry";
 import { safePageScale, writePageScale } from "./measureDict";
 
 export interface RawBitmap {
@@ -408,6 +409,10 @@ export class EngineCore {
     const bytes = d.doc.saveToBuffer(incremental ? "incremental" : "compress,garbage=compact").asUint8Array().slice();
     const info = this.open(bytes, d.name, docId);
     return { bytes, info, markups: this.readMarkups(docId) };
+  }
+
+  snapGeometry(docId: string, pageIndex: number): SnapGeometry {
+    return collectSnapGeometry(this.displayList(this.get(docId), pageIndex, false));
   }
 
   imagePdf(pages: ImagePdfPage[], title: string): Uint8Array {

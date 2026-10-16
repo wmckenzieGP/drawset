@@ -3,9 +3,10 @@
  * Transient state lives here; document changes go through `commit` so they are undoable.
  */
 import { markupFromTool } from "../toolchest/chest";
+import { contentIndex, snapPoint, type SnapKind } from "./snap";
 import { create } from "zustand";
 import { engine } from "../../engine/client";
-import { apply, normRect, snapAngle, snapSquare, type Pt, type Quad, type Rect, dist, rectContains, transformRect } from "../../markup/geometry";
+import { apply, normRect, rectPoints, snapAngle, snapSquare, type Pt, type Quad, type Rect, dist, rectContains, transformRect } from "../../markup/geometry";
 import { markupBounds } from "../../markup/appearance";
 import { canResize, hitTest, scaleBetween, setVertex, translate, vertexHandles, withDerivedRect } from "../../markup/edit";
 import { KIND_LABELS, nowIso, type Markup, type MarkupKind } from "../../markup/model";
@@ -50,6 +51,8 @@ const POLY_TOOLS = new Set<ToolId>(["polyline", "polygon", "cloud", "polylength"
 /** Where calibration picks go: the dialog listens. */
 export const useCalibrationPick = create<{ pick: { pageId: string; a: Pt; b: Pt } | null }>(() => ({ pick: null }));
 
+/** Tools whose points snap. Freehand, text and zoom tools do not. */
+const SNAP_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "textbox", "callout", "note", "stamp", "image", "length", "polylength", "area", "perimeter", "count", "angle", "calibrate", "cutout", "redact", "erase", "chest"]);
 const BOX_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "textbox", "stamp", "image", "zoom", "redact", "erase"]);
 const TEXT_TOOLS = new Set<ToolId>(["text", "highlight", "underline", "strikeout"]);
 
@@ -77,6 +80,25 @@ export class Controller {
   /** Page-space tolerance for a number of screen pixels. */
   tol(page: PageLayout, px: number): number {
     return px / Math.hypot(page.m[0], page.m[1]);
+  }
+
+  /** What the pointer last snapped to, drawn as a marker. */
+  snapMark: { pageId: string; pt: Pt; kind: SnapKind } | null = null;
+
+  /** `p` snapped to markups, the drawing or the grid (as switched on); Alt held turns snapping off. */
+  snapAt(page: PageLayout, p: Pt, e: { altKey?: boolean }, exclude?: string): Pt {
+    this.snapMark = null;
+    const s = useApp.getState().snap;
+    const tab = this.host.tab();
+    if (!tab || e.altKey || (!s.markups && !s.content && !s.grid)) return p;
+    const tol = this.tol(page, 8);
+    const markups = s.markups ? markupsInRect(tab.state.markups, page.entry.id, [p[0] - tol, p[1] - tol, p[0] + tol, p[1] + tol]).filter((m) => m.id !== exclude) : null;
+    const content = s.content ? contentIndex(tab.docId, page.entry.src, () => this.host.redraw()) : null;
+    const b = page.entry.info.bounds;
+    const hit = snapPoint(p, tol, { markups, content, grid: s.grid ? (s.gridMm * 72) / 25.4 : null, origin: [b[0], b[1]] });
+    if (!hit) return p;
+    this.snapMark = { pageId: page.entry.id, pt: hit.pt, kind: hit.kind };
+    return hit.pt;
   }
 
   // ---------- selection helpers ----------
@@ -218,6 +240,7 @@ export class Controller {
       if (page && page.entry.id === this.drag.page.entry.id) {
         let p = this.toPage(page, c);
         if (e.shiftKey && this.drag.pts.length) p = snapAngle(this.drag.pts[this.drag.pts.length - 1], p);
+        else p = this.snapAt(page, p, e);
         this.drag.pts.push(p);
         this.drag.cursor = p;
         this.drag.downAt = p;
@@ -266,7 +289,8 @@ export class Controller {
     }
 
     if (!page) return;
-    const p = this.toPage(page, c);
+    const raw = this.toPage(page, c);
+    const p = SNAP_TOOLS.has(tool) ? this.snapAt(page, raw, e) : raw;
     if (BOX_TOOLS.has(tool)) {
       this.drag = { t: "box", kind: tool as MarkupKind | "zoom", page, a: p, b: p, moved: false };
     } else if (tool === "line" || tool === "arrow" || tool === "length" || tool === "calibrate") {
@@ -312,6 +336,12 @@ export class Controller {
     const c = this.contentPoint(e);
     if (d.t === "idle") {
       this.updateHover(c);
+      // show what a click would snap to
+      const had = this.snapMark;
+      const page = SNAP_TOOLS.has(this.tool) ? pageAt(this.host.layout(), c[0], c[1]) : null;
+      if (page) this.snapAt(page, this.toPage(page, c), e);
+      else this.snapMark = null;
+      if (had || this.snapMark) this.host.redraw();
       return;
     }
     const p = this.toPage(d.page, c);
@@ -346,24 +376,24 @@ export class Controller {
         break;
       }
       case "vertex": {
-        let q = p;
+        let q: Pt;
         if (e.shiftKey) {
           const pts = d.original.points;
           const anchor = pts[d.index === 0 ? 1 : d.index - 1] ?? pts[0];
           q = snapAngle(anchor, p);
-        }
+        } else q = this.snapAt(d.page, p, e, d.original.id);
         d.current = setVertex(d.original, d.index, q);
         break;
       }
       case "box":
-        d.b = e.shiftKey ? snapSquare(d.a, p) : p;
+        d.b = e.shiftKey ? snapSquare(d.a, p) : d.kind === "zoom" ? p : this.snapAt(d.page, p, e);
         if (!d.moved && dist(d.a, d.b) > this.tol(d.page, 3)) d.moved = true;
         break;
       case "line":
-        d.b = e.shiftKey ? snapAngle(d.a, p) : p;
+        d.b = e.shiftKey ? snapAngle(d.a, p) : this.snapAt(d.page, p, e);
         break;
       case "callout":
-        d.b = e.shiftKey ? snapAngle(d.tip, p) : p;
+        d.b = e.shiftKey ? snapAngle(d.tip, p) : this.snapAt(d.page, p, e);
         break;
       case "ink": {
         const last = d.pts[d.pts.length - 1];
@@ -372,7 +402,7 @@ export class Controller {
       }
       case "poly": {
         const last = d.pts[d.pts.length - 1];
-        d.cursor = e.shiftKey ? snapAngle(last, p) : p;
+        d.cursor = e.shiftKey ? snapAngle(last, p) : this.snapAt(d.page, p, e);
         // dragging the very first press draws a rectangular cloud instead
         if (d.kind === "cloud" && d.pts.length === 1 && d.downAt && e.buttons === 1 && dist(d.downAt, p) > this.tol(d.page, 6)) {
           this.drag = { t: "box", kind: "cloud", page: d.page, a: d.pts[0], b: p, moved: true };
@@ -599,13 +629,5 @@ export class Controller {
   }
 }
 
-export function rectPoints(r: Rect): Pt[] {
-  return [
-    [r[0], r[1]],
-    [r[2], r[1]],
-    [r[2], r[3]],
-    [r[0], r[3]],
-  ];
-}
 
 export { withDerivedRect };

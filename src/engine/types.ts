@@ -94,6 +94,16 @@ export interface SaveResult {
   markups: MarkupRecord[];
 }
 
+/** A page's vector geometry for snapping, in page space. */
+export interface SnapGeometry {
+  /** Straight segments, x0 y0 x1 y1 each. */
+  segments: Float64Array;
+  /** Path start points and curve end points, x y each (segment ends are in `segments`). */
+  points: Float64Array;
+  /** True when the page had more geometry than is collected. */
+  truncated: boolean;
+}
+
 /** One page of an image-only PDF: RGBA pixels shown at pageWidth × pageHeight points, under a caption band. */
 export interface ImagePdfPage {
   width: number;
@@ -122,6 +132,8 @@ export interface PdfEngine {
   save(docId: string, plan: SavePlan, mode: "incremental" | "full"): Promise<SaveResult>;
   /** Writes the plan into a copy and returns its bytes; the open document is unchanged. */
   saveCopy(docId: string, plan: SavePlan): Promise<Uint8Array>;
+  /** Vector geometry of a page's content (markups excluded) for snapping. */
+  snapGeometry(docId: string, page: number): Promise<SnapGeometry>;
   /** A new PDF made of images (overlay export). */
   imagePdf(pages: ImagePdfPage[], title: string): Promise<Uint8Array>;
 }

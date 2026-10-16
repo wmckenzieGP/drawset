@@ -35,7 +35,7 @@ Each item is about 2 hours or less. Tick `[x]` when its acceptance criteria pass
 - [x] T2.5 Overlay pages: two pages, red/blue, two-point alignment, toggles, export as image-based PDF labelled as such. *Accept:* overlay of identical pages shows no colour difference; export opens in pdf.js.
 - [x] T2.6 Tool Chest: save markup as tool, sets, recents, JSON import/export. *Accept:* a tool reproduces the original markup's properties exactly.
 - [x] T2.7 Replies: threaded replies (/IRT /RT /R) shown in the Markups List. *Accept:* replies round-trip and display.
-- [ ] T2.8 Snapping: markup vertices and grid, then page vector endpoints/intersections. *Accept:* snapped points equal target coordinates.
+- [x] T2.8 Snapping: markup vertices and grid, then page vector endpoints/intersections. *Accept:* snapped points equal target coordinates.
 - [ ] T2.9 Tier 2 release v0.2.
 
 ## Tier 3 — Only if ahead (release v0.3)

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { activeTab, scrollToPage, setView, useApp } from "../state/store";
+import { activeTab, scrollToPage, setSnap, setView, useApp } from "../state/store";
 import { clampScale } from "../features/viewer/Viewer";
 
 /** Finds a page by number ("12") or by label ("M-012"); returns the page index or -1. */
@@ -20,6 +20,7 @@ export function findPage(input: string, labels: string[]): number {
 export function StatusBar() {
   const tab = useApp(activeTab);
   const author = useApp((s) => s.author);
+  const snap = useApp((s) => s.snap);
   const [goto, setGoto] = useState<string | null>(null);
   const [zoomText, setZoomText] = useState<string | null>(null);
   if (!tab) return <div className="statusbar"><span>Ready</span></div>;
@@ -74,6 +75,27 @@ export function StatusBar() {
       </form>
       <span className="muted">{tab.view.rotation ? `View rotated ${tab.view.rotation}°` : ""}</span>
       <span className="spacer" />
+      <span className="snap-toggles" title="Snapping (hold Alt to draw without snapping)">
+        <span className="muted">Snap</span>
+        <button className={snap.markups ? "on" : ""} aria-pressed={snap.markups} onClick={() => setSnap({ markups: !snap.markups })} data-testid="snap-markups">
+          Markups
+        </button>
+        <button className={snap.content ? "on" : ""} aria-pressed={snap.content} onClick={() => setSnap({ content: !snap.content })} data-testid="snap-content">
+          Drawing
+        </button>
+        <button className={snap.grid ? "on" : ""} aria-pressed={snap.grid} onClick={() => setSnap({ grid: !snap.grid })} data-testid="snap-grid">
+          Grid
+        </button>
+        {snap.grid && (
+          <select value={snap.gridMm} onChange={(e) => setSnap({ gridMm: Number(e.target.value) })} aria-label="Grid spacing" data-testid="snap-grid-size">
+            {[1, 2, 2.5, 5, 10, 20, 25, 50].map((v) => (
+              <option key={v} value={v}>
+                {v} mm
+              </option>
+            ))}
+          </select>
+        )}
+      </span>
       <span className="muted" data-testid="markup-count">{tab.markupsLoaded ? `${markupCount} markup${markupCount === 1 ? "" : "s"}` : "Reading markups…"}</span>
       <span className="muted">Author: {author}</span>
     </div>

@@ -157,3 +157,13 @@ export function displayMatrix(bounds: Rect, scale: number, rotate: number): Matr
   const r = transformRect(bounds, m0);
   return concat(m0, translateM(-r[0], -r[1]));
 }
+
+/** Corners of a rectangle, clockwise from (x0, y0). */
+export function rectPoints(r: Rect): Pt[] {
+  return [
+    [r[0], r[1]],
+    [r[2], r[1]],
+    [r[2], r[3]],
+    [r[0], r[3]],
+  ];
+}

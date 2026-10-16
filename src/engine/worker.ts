@@ -18,6 +18,7 @@ const methods: Record<string, Handler> = {
   save: (docId: string, plan, mode) => core.save(docId, plan, mode),
   saveCopy: (docId: string, plan) => core.saveCopy(docId, plan),
   imagePdf: (pages, title: string) => core.imagePdf(pages, title),
+  snapGeometry: (docId: string, page: number) => core.snapGeometry(docId, page),
 };
 
 function isBitmap(v: unknown): v is RawBitmap {
@@ -38,6 +39,9 @@ self.onmessage = async (ev: MessageEvent<{ id: number; method: string; args: unk
       result = { ...rest, width, height, image };
     } else if (result && typeof result === "object" && (result as { bytes?: unknown }).bytes instanceof Uint8Array) {
       transfer.push(((result as { bytes: Uint8Array }).bytes).buffer as ArrayBuffer);
+    } else if (result && typeof result === "object" && (result as { segments?: unknown }).segments instanceof Float64Array) {
+      const g = result as { segments: Float64Array; points: Float64Array };
+      transfer.push(g.segments.buffer as ArrayBuffer, g.points.buffer as ArrayBuffer);
     } else if (result instanceof Uint8Array) {
       transfer.push(result.buffer as ArrayBuffer);
     }

@@ -41,3 +41,6 @@ A tool stores the markup's kind, geometry, style, subject, text, note icon, stam
 
 ## 19. Replies are invisible /Text annotations in one flat thread per markup
 Each reply is a /Text annotation with /IRT (the markup, or the reply it answers), /RT /R, author, dates, /NM and an empty appearance stream, so viewers that understand /IRT list it under its markup and viewers that do not draw no stray note icon. Replies to replies keep their /IRT chain in the file and show indented in Drawset; the whole chain belongs to the first markup. Deleting a reply deletes the replies that answer it. Status changes stay separate /StateModel /Review annotations and are not listed as replies.
+
+## 20. Snapping order and tolerance
+Within 8 screen pixels the nearest markup vertex or drawing end point wins; only when there is none does a crossing of two drawing lines count; only when there is neither does the grid apply. Curves offer their end points but not intersections. Snapping is off while Shift constrains an angle or Alt is held, and freehand pen, highlighter, text and zoom tools never snap. MuPDF reads content-stream numbers in single precision, so a snapped point equals the drawn coordinate to about 1e-5 pt.
