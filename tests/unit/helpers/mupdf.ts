@@ -4,7 +4,7 @@ import type { Raster } from "./pdfjs";
 export function openMupdf(bytes: Uint8Array) {
   const doc = mupdf.Document.openDocument(bytes, "application/pdf").asPDF();
   if (!doc) throw new Error("not a PDF");
-  return doc;
+  return doc as mupdf.PDFDocument;
 }
 
 /** Render a page including annotations with MuPDF; RGBA pixels on white. */

@@ -3,7 +3,7 @@ import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createCanvas } from "@napi-rs/canvas";
 
 export async function openPdfjs(bytes: Uint8Array) {
-  const task = pdfjs.getDocument({ data: bytes.slice(), verbosity: 0, isEvalSupported: false, useSystemFonts: false, disableFontFace: true });
+  const task = pdfjs.getDocument({ data: bytes.slice(), verbosity: 0, useSystemFonts: false, disableFontFace: true });
   const doc = await task.promise;
   return Object.assign(doc, { destroy: () => task.destroy() });
 }

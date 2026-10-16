@@ -1,0 +1,278 @@
+/**
+ * Application state. Each open document is a tab with an undoable DocState (pages + markups).
+ * Every document change goes through `commit`, which records a snapshot for undo/redo.
+ */
+import { create } from "zustand";
+import type { DocInfo, MarkupRecord, PageInfo, SearchHit } from "../engine/types";
+import type { Quad, Rect } from "../markup/geometry";
+import { DEFAULT_STYLE, type Markup, type MarkupKind, type MarkupStyle } from "../markup/model";
+
+export type Rotation = 0 | 90 | 180 | 270;
+
+export interface PageEntry {
+  id: string;
+  /** Physical page index in the engine document. */
+  src: number;
+  info: PageInfo;
+  /** Extra rotation applied by the user (page operation), clockwise. */
+  rotation: Rotation;
+}
+
+export interface DocState {
+  pages: PageEntry[];
+  markups: Record<string, Markup>;
+}
+
+export interface ViewState {
+  /** CSS pixels per point. */
+  scale: number;
+  /** View rotation (does not change the file). */
+  rotation: Rotation;
+  /** Pending fit request, consumed by the viewer. */
+  fit?: "page" | "width";
+  /** Requested scroll target, consumed by the viewer. */
+  scrollTo?: { page: number; rect?: Rect; nonce: number };
+}
+
+export interface SearchState {
+  query: string;
+  hits: SearchHit[];
+  current: number;
+  running: boolean;
+  done: boolean;
+}
+
+export interface TextSelection {
+  pageId: string;
+  quads: Quad[];
+  text: string;
+}
+
+export interface DocTab {
+  key: string;
+  docId: string;
+  name: string;
+  path: string | null;
+  info: DocInfo;
+  state: DocState;
+  /** State as last saved; the document is dirty when state !== saved. */
+  saved: DocState;
+  undo: { label: string; state: DocState }[];
+  redo: { label: string; state: DocState }[];
+  selection: string[];
+  /** Selected pages in the thumbnails panel (page ids). */
+  pageSelection: string[];
+  markupsLoaded: boolean;
+  view: ViewState;
+  currentPage: number;
+  search: SearchState;
+  textSelection: TextSelection | null;
+}
+
+export type ToolId =
+  | "select"
+  | "pan"
+  | "text"
+  | "zoom"
+  | MarkupKind;
+
+export interface ToolState {
+  tool: ToolId;
+  reuse: boolean;
+  /** Default style per markup kind (what the next markup gets). */
+  defaults: Partial<Record<MarkupKind, MarkupStyle>>;
+  stampId: string;
+  /** Pending image for stamp/image tools. */
+  pendingImage: Markup["image"] | null;
+}
+
+export interface AppState {
+  tabs: DocTab[];
+  active: string | null;
+  tools: ToolState;
+  author: string;
+  leftPanel: "thumbnails" | "bookmarks" | "search" | null;
+  rightPanel: boolean;
+  bottomPanel: boolean;
+  message: { text: string; kind: "info" | "error" } | null;
+  busy: string | null;
+}
+
+export const KIND_DEFAULTS: Partial<Record<MarkupKind, Partial<MarkupStyle>>> = {
+  highlighter: { color: [1, 0.9, 0], width: 12, opacity: 1 },
+  highlight: { color: [1, 0.9, 0], opacity: 1 },
+  underline: { color: [0, 0.4, 0.9] },
+  strikeout: { color: [0.9, 0.1, 0.1] },
+  arrow: { lineEnd: "ClosedArrow" },
+  callout: { lineStart: "OpenArrow", color: [0.9, 0.1, 0.1], width: 1, fill: [1, 1, 1] },
+  textbox: { color: null, width: 1, fill: null },
+  note: { color: [1, 0.82, 0.2] },
+  stamp: { color: null },
+  image: { color: null },
+};
+
+export function defaultStyleFor(kind: MarkupKind): MarkupStyle {
+  return { ...DEFAULT_STYLE, ...(KIND_DEFAULTS[kind] ?? {}) };
+}
+
+function loadAuthor(): string {
+  try {
+    return localStorage.getItem("drawset.author") || "Drawset user";
+  } catch {
+    return "Drawset user";
+  }
+}
+
+export const useApp = create<AppState>(() => ({
+  tabs: [],
+  active: null,
+  tools: { tool: "select", reuse: false, defaults: {}, stampId: "approved", pendingImage: null },
+  author: loadAuthor(),
+  leftPanel: "thumbnails",
+  rightPanel: true,
+  bottomPanel: false,
+  message: null,
+  busy: null,
+}));
+
+let tabSeq = 1;
+let pageSeq = 1;
+export const newPageId = () => `pg${pageSeq++}`;
+
+export function activeTab(s: AppState = useApp.getState()): DocTab | null {
+  return s.tabs.find((t) => t.key === s.active) ?? null;
+}
+
+export function updateTab(key: string, fn: (t: DocTab) => DocTab) {
+  useApp.setState((s) => ({ tabs: s.tabs.map((t) => (t.key === key ? fn(t) : t)) }));
+}
+
+export function pagesFromInfo(info: DocInfo): PageEntry[] {
+  return info.pages.map((p) => ({ id: newPageId(), src: p.index, info: p, rotation: 0 }));
+}
+
+/** Converts records read from the engine into markups attached to page entries (by physical index). */
+export function recordsToMarkups(records: MarkupRecord[], pages: PageEntry[]): Record<string, Markup> {
+  const bySrc = new Map(pages.map((p) => [p.src, p.id]));
+  const out: Record<string, Markup> = {};
+  for (const r of records) {
+    const pageId = bySrc.get(r.pageIndex);
+    if (!pageId) continue;
+    const { pageIndex: _pageIndex, ...rest } = r;
+    let id = rest.id;
+    while (out[id]) id = `${rest.id}-${Math.random().toString(36).slice(2, 7)}`;
+    out[id] = { ...rest, id, pageId };
+  }
+  return out;
+}
+
+export function addTab(info: DocInfo, name: string, path: string | null): string {
+  const key = `tab${tabSeq++}`;
+  const pages = pagesFromInfo(info);
+  const state: DocState = { pages, markups: {} };
+  const tab: DocTab = {
+    key,
+    docId: info.docId,
+    name,
+    path,
+    info,
+    state,
+    saved: state,
+    undo: [],
+    redo: [],
+    selection: [],
+    pageSelection: [],
+    markupsLoaded: false,
+    view: { scale: 0.25, rotation: 0, fit: "page" },
+    currentPage: 0,
+    search: { query: "", hits: [], current: -1, running: false, done: false },
+    textSelection: null,
+  };
+  useApp.setState((s) => ({ tabs: [...s.tabs, tab], active: key }));
+  return key;
+}
+
+/** Sets the markups read from the file as both current and saved state (no undo entry). */
+export function setLoadedMarkups(key: string, markups: Record<string, Markup>) {
+  updateTab(key, (t) => {
+    const state = { ...t.state, markups };
+    const isClean = t.state === t.saved;
+    return { ...t, state, saved: isClean ? state : { ...t.saved, markups }, markupsLoaded: true };
+  });
+}
+
+const MAX_UNDO = 200;
+
+let lastCoalesce: { key: string; tag: string; at: number } | null = null;
+
+/**
+ * Applies a document change as one undoable step. Changes with the same `coalesce` tag in quick
+ * succession (dragging a colour or opacity slider) merge into a single undo step.
+ */
+export function commit(key: string, label: string, fn: (s: DocState) => DocState, coalesce?: string) {
+  updateTab(key, (t) => {
+    const next = fn(t.state);
+    if (next === t.state) return t;
+    const now = Date.now();
+    const merge = !!coalesce && !!lastCoalesce && lastCoalesce.key === key && lastCoalesce.tag === coalesce && now - lastCoalesce.at < 1500 && t.undo.length > 0;
+    lastCoalesce = coalesce ? { key, tag: coalesce, at: now } : null;
+    const undo = merge ? t.undo : [...t.undo, { label, state: t.state }].slice(-MAX_UNDO);
+    const markups = next.markups;
+    return { ...t, state: next, undo, redo: [], selection: t.selection.filter((id) => markups[id]) };
+  });
+}
+
+export function undo(key: string) {
+  updateTab(key, (t) => {
+    const last = t.undo[t.undo.length - 1];
+    if (!last) return t;
+    return { ...t, state: last.state, undo: t.undo.slice(0, -1), redo: [...t.redo, { label: last.label, state: t.state }], selection: t.selection.filter((id) => last.state.markups[id]) };
+  });
+}
+
+export function redo(key: string) {
+  updateTab(key, (t) => {
+    const next = t.redo[t.redo.length - 1];
+    if (!next) return t;
+    return { ...t, state: next.state, redo: t.redo.slice(0, -1), undo: [...t.undo, { label: next.label, state: t.state }], selection: t.selection.filter((id) => next.state.markups[id]) };
+  });
+}
+
+export function isDirty(t: DocTab): boolean {
+  return t.state !== t.saved;
+}
+
+/** Helpers for markup edits inside commit. */
+export function withMarkups(s: DocState, changed: Markup[], removed: string[] = []): DocState {
+  const markups = { ...s.markups };
+  for (const id of removed) delete markups[id];
+  for (const m of changed) markups[m.id] = m;
+  return { ...s, markups };
+}
+
+export function markupsOnPage(s: DocState, pageId: string): Markup[] {
+  return Object.values(s.markups).filter((m) => m.pageId === pageId);
+}
+
+export function flash(text: string, kind: "info" | "error" = "info") {
+  useApp.setState({ message: { text, kind } });
+}
+
+export function setAuthor(name: string) {
+  const author = name.trim() || "Drawset user";
+  try {
+    localStorage.setItem("drawset.author", author);
+  } catch {
+    /* storage unavailable */
+  }
+  useApp.setState({ author });
+}
+
+export function setView(key: string, view: Partial<ViewState>) {
+  updateTab(key, (t) => ({ ...t, view: { ...t.view, ...view } }));
+}
+
+let scrollNonce = 1;
+export function scrollToPage(key: string, page: number, rect?: Rect) {
+  updateTab(key, (t) => ({ ...t, currentPage: page, view: { ...t.view, scrollTo: { page, rect, nonce: scrollNonce++ } } }));
+}
