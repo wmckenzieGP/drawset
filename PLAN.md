@@ -39,10 +39,15 @@ Each item is about 2 hours or less. Tick `[x]` when its acceptance criteria pass
 - [ ] T2.9 Tier 2 release v0.2. (Suite, screenshots, tier report and PR to main done; tag and installer wait on S3.)
 
 ## Tier 3 — Only if ahead (release v0.3)
-- [ ] T3.1 Compare documents (raster diff, clouds listed as markups).
+- [x] T3.1 Compare documents (raster diff, clouds listed as markups). *Accept:* a revised sheet gets one cloud around each change and none elsewhere; identical pages get none.
 - [ ] T3.2 Split view with synced pan, zoom and page.
 - [ ] T3.3 Page labels from a title-block region; bookmarks from labels.
 - [ ] T3.4 Forms: fill, save, flatten.
+- [ ] T3.5 Headers, footers and watermarks with date, file name, page label and "page n of N" variables.
+- [ ] T3.6 Hyperlinks: link an area to a page, a file or a URL, with back navigation.
+- [ ] T3.7 Security: add or remove an open password and permission restrictions.
+- [ ] T3.8 Crash recovery: journal unsaved markups every 60 s and offer to restore after a crash.
+- [ ] T3.9 OCR: invisible text layer for scanned pages with tesseract.js.
 - [ ] T3.5 Headers, footers and watermarks with variables.
 - [ ] T3.6 Hyperlinks to page, file or URL with back navigation.
 - [ ] T3.7 Security: open password and permissions.

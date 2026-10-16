@@ -4,8 +4,10 @@ import { create } from "zustand";
 import { engine } from "../../engine/client";
 import type { Matrix, Pt } from "../../markup/geometry";
 import { saveAs } from "../../platform/host";
-import { activeTab, flash, useApp, type DocTab } from "../../state/store";
-import { alignFromPoints, colourfulness, compositeOverlay } from "./overlayMath";
+import type { Markup } from "../../markup/model";
+import { activeTab, commit, flash, useApp, withMarkups, type DocTab } from "../../state/store";
+import { compareClouds, pixelRectToPage } from "./compare";
+import { alignFromPoints, colourfulness, compositeOverlay, diffRegions } from "./overlayMath";
 
 const useDialog = create<{ open: boolean }>(() => ({ open: false }));
 export const openOverlayDialog = () => activeTab() && useDialog.setState({ open: true });
@@ -87,6 +89,7 @@ export function OverlayDialog() {
   const [imgs, setImgs] = useState<{ a: ImageBitmap; b: ImageBitmap; scale: number } | null>(null);
   const [colour, setColour] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [cloudCount, setCloudCount] = useState<number | null>(null);
 
   // default pages: the current page against the same page of another open file, else the next page
   useEffect(() => {
@@ -98,6 +101,7 @@ export function OverlayDialog() {
     setB(other ? { key: other.key, page: Math.min(t.currentPage, other.state.pages.length - 1) } : { key: t.key, page: Math.min(t.currentPage + 1, t.state.pages.length - 1) });
     setAlign(IDENTITY);
     setAligned(false);
+    setCloudCount(null);
     setPhase(null);
   }, [open]);
 
@@ -206,6 +210,53 @@ export function OverlayDialog() {
     }
   };
 
+  /** Clouds every changed area on the red page(s), compared with the blue; one undo step. */
+  const cloudChanges = async (all: boolean) => {
+    setBusy(true);
+    try {
+      const all_ = useApp.getState().tabs;
+      const ta = all_.find((x) => x.key === a.key);
+      const tb = all_.find((x) => x.key === b.key);
+      if (!ta || !tb) return;
+      const pairs = all ? [...Array(Math.min(ta.state.pages.length, tb.state.pages.length)).keys()].map((i) => [i, i]) : [[a.page, b.page]];
+      const clouds: Markup[] = [];
+      let skipped = 0;
+      for (const [pa, pb] of pairs) {
+        const ea = ta.state.pages[pa];
+        const eb = tb.state.pages[pb];
+        useApp.setState({ busy: `Comparing page ${pa + 1}…` });
+        const scale = VIEW_PX / longest(all_, { key: a.key, page: pa });
+        const [ia, ib] = await Promise.all([engine().render({ docId: ta.docId, page: ea.src, scale, rotate: 0 }), engine().render({ docId: tb.docId, page: eb.src, scale, rotate: 0 })]);
+        if (!ia.image || !ib.image) continue;
+        // the two-point alignment was found on the view; it carries over when neither page is turned
+        const k = imgs ? scale / imgs.scale : 1;
+        const m: Matrix = aligned && ea.rotation === 0 && eb.rotation === 0 ? [align[0], align[1], align[2], align[3], align[4] * k, align[5] * k] : IDENTITY;
+        const pxA = pixels(ia.image, ia.width, ia.height);
+        const pxB = pixels(ib.image, ia.width, ia.height, m);
+        ia.image.close();
+        ib.image.close();
+        const regions = diffRegions(pxA.data, pxB.data, ia.width, ia.height);
+        // so many changes means different sheets or a bad alignment, not a revision
+        if (regions.length > 150) {
+          skipped++;
+          continue;
+        }
+        clouds.push(...compareClouds(ea.id, regions.map((r) => pixelRectToPage(r, ea.info.bounds, scale)), pageLabel(all_, { key: b.key, page: pb })));
+      }
+      if (clouds.length) commit(a.key, `Compare (${clouds.length} change${clouds.length === 1 ? "" : "s"})`, (st) => withMarkups(st, clouds));
+      flash(
+        `${clouds.length ? `Clouded ${clouds.length} changed area${clouds.length === 1 ? "" : "s"}` : "No changes found"}${skipped ? `; skipped ${skipped} page${skipped === 1 ? "" : "s"} that differ throughout (check they are revisions of the same sheet and aligned)` : ""}.`,
+        skipped ? "error" : "info",
+      );
+      setCloudCount(clouds.length);
+    } catch (e) {
+      flash(`Could not compare: ${(e as Error).message}`, "error");
+    } finally {
+      useApp.setState({ busy: null });
+      setBusy(false);
+    }
+  };
+
   const sidePicker = (s: Side, set: (s: Side) => void, colourName: string, testId: string) => {
     const t = tabs.find((x) => x.key === s.key);
     return (
@@ -239,7 +290,7 @@ export function OverlayDialog() {
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" />
         <Dialog.Content className="dialog overlay-dialog" aria-describedby={undefined} data-testid="overlay-dialog">
-          <Dialog.Title>Overlay pages</Dialog.Title>
+          <Dialog.Title>Overlay and compare</Dialog.Title>
           <div className="overlay-controls">
             <div>
               {sidePicker(a, (s) => { setA(s); setAligned(false); setAlign(IDENTITY); }, "red", "overlay-a")}
@@ -270,8 +321,16 @@ export function OverlayDialog() {
             <canvas ref={canvas} onClick={pickAt} className={phase ? "picking" : ""} data-testid="overlay-canvas" data-colour={colour.toFixed(5)} data-ready={imgs ? "1" : "0"} />
           </div>
           <div className="dialog-buttons">
-            <span className="muted overlay-note">The export is an image of the overlay, labelled as such; it is not vector content.</span>
+            <span className="muted overlay-note" data-testid="overlay-cloud-count">
+              {cloudCount !== null ? `${cloudCount} change${cloudCount === 1 ? "" : "s"} clouded on the red pages.` : "Clouds go on the red file, the newer revision. The export is an image of the overlay, labelled as such."}
+            </span>
             <Dialog.Close className="btn">Close</Dialog.Close>
+            <button className="btn" disabled={!imgs || busy || !!phase} onClick={() => cloudChanges(false)} data-testid="overlay-cloud">
+              Cloud changes
+            </button>
+            <button className="btn" disabled={!imgs || busy || !!phase || a.key === b.key} onClick={() => cloudChanges(true)} data-testid="overlay-cloud-all">
+              Cloud changes, all pages
+            </button>
             <button className="btn primary" disabled={!imgs || busy || !!phase} onClick={exportPdf} data-testid="overlay-export">
               {busy ? "Exporting…" : "Export as PDF…"}
             </button>

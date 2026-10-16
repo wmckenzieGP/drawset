@@ -3,6 +3,7 @@
  *
  *   dense-a1.pdf        A1 landscape sheet with about 20,000 vector paths and a title block
  *   calibration.pdf     A3 sheet drawn at 1:100 with known dimensions (see calibration.json)
+ *   calibration-rev.pdf the same sheet revised: a new 60 x 30 pt box at (700, 500) and a new line (900,150)-(1000,150)
  *   set-200.pdf         200-page A1 set with page labels M-001…, bookmarks and planted search terms
  *   scanned.pdf         one page holding a single raster image and no text
  *   annotated.pdf       existing annotations of several types, with unknown and vendor private keys
@@ -155,6 +156,10 @@ function makeCalibration() {
   parts.push(text(ox, A3[1] - 40, 14, "DRAWSET CALIBRATION SHEET"));
   doc.insertPage(-1, doc.addPage([0, 0, A3[0], A3[1]], 0, res, parts.join("")));
   save(doc, "calibration.pdf");
+  const rev = new mupdf.PDFDocument();
+  const revParts = [...parts, "q 0 g 700 500 60 30 re f Q q 0 G 1 w 900 150 m 1000 150 l S Q\n"];
+  rev.insertPage(-1, rev.addPage([0, 0, A3[0], A3[1]], 0, { Font: { F1: helvetica(rev) } }, revParts.join("")));
+  save(rev, "calibration-rev.pdf");
   const known = {
     scale: "1:100",
     pointsPerMetre: m,

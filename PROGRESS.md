@@ -2,7 +2,7 @@
 
 **Current item:** T1.18 Tier 1 release (waiting on S3 for the Windows build)
 **Last finished:** T1.17 print
-**Next up:** T3.1 compare documents (v0.1/v0.2 tags and installers wait on S3) (Tier 2 continues while S3 is blocked)
+**Next up:** T3.2 split view (v0.1/v0.2 tags and installers wait on S3) (Tier 2 continues while S3 is blocked)
 
 ## How to install
 Download `Drawset-Setup-<version>.exe` from the latest GitHub Release (https://github.com/wmckenziegp/drawset/releases) and run it. Windows SmartScreen may warn because the installer is not code-signed: choose "More info" then "Run anyway".
@@ -33,3 +33,8 @@ Download `Drawset-Setup-<version>.exe` from the latest GitHub Release (https://g
 - T2.7: Reply threads in the Properties panel (reply to a markup or to a reply, edit, delete; each an undo step) and in the Markups List (Replies column, expandable reply rows, Show replies, filter matches reply text, CSV Replies column). Written as /Text with /IRT and /RT /R, an empty appearance, and updated in place on incremental save. Tests: thread written and read back with its shape, pdf.js sees the same /IRT chain, page renders unchanged in MuPDF and pdf.js, edit/delete keep the rest; nested replies from other editors without /NM read correctly; /RT /Group is not a reply.
 - T2.8: Snapping for every drawing tool and vertex edits, switched in the status bar (Markups, Drawing, Grid with spacing in mm; Alt held draws without snapping), with a marker showing the target. The engine collects each page's line segments and curve ends once (dense A1: 54k segments) and the viewer indexes them with rbush. Tests: end points snap exactly (including inside transformed groups), crossing lines snap to their intersection, markup vertices beat the grid, the grid starts at the page corner, dense-sheet queries are fast; E2E draws a length onto the calibration sheet's line ends.
 - T2.9: full suite green (75 unit, 23 browser), new screenshots (replies and Tool Chest, overlay), tier report in docs/TIER-REPORTS.md, PR to main opened. Tags v0.1/v0.2 and installers wait for the workflows (S3). Fixed the Markups List toolbar wrapping and a stretched checkbox found in the screenshots.
+
+## Tier 2 report (16/10/2026)
+All Tier 2 items are built and tested: calibration, six measurement types with quantities, erase and redact, overlay pages, Tool Chest, threaded replies and snapping. Typecheck and lint clean; 75 unit and 23 browser tests pass. The v0.1 and v0.2 tags and installers wait on the workflow files (S3). Full report: docs/TIER-REPORTS.md. PR #1 brings main up to date.
+
+- T3.1: Tools > Compare documents (the overlay dialog) clouds every changed area on the red file, the newer revision: "Cloud changes" for the shown pair, "Cloud changes, all pages" page by page, using the two-point alignment when set. Changes are found per 8-pixel cell and joined when close, so a revised detail gets one cloud; pages that differ throughout are skipped with a warning. Clouds have subject "Compare" and say what they were compared with; all are one undo step. New fixture calibration-rev.pdf; unit and e2e tests check one cloud per change and none for identical pages.

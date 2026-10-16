@@ -156,6 +156,7 @@ function MenuBar() {
         <Item label="Review and apply redactions…" onSelect={openRedactDialog} disabled={!has} />
         <Sep />
         <Item label="Overlay pages…" onSelect={openOverlayDialog} disabled={!has} />
+        <Item label="Compare documents…" onSelect={openOverlayDialog} disabled={!has} />
         <Sep />
         <Item label={useApp.getState().tools.reuse ? "Turn reuse mode off" : "Turn reuse mode on"} shortcut="Ctrl+R" onSelect={() => useApp.setState((s) => ({ tools: { ...s.tools, reuse: !s.tools.reuse } }))} />
       </TopMenu>
