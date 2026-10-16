@@ -23,6 +23,7 @@ export function useNodeEngine(): EngineCore {
     addBlankPage: async (d, w, h) => core.addBlankPage(d, w, h),
     save: async (d, p, m) => core.save(d, p, m),
     saveCopy: async (d, p) => core.saveCopy(d, p),
+    imagePdf: async (p, t) => core.imagePdf(p, t),
   };
   setEngine(e);
   return core;

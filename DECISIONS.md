@@ -32,3 +32,6 @@ Area measurements default to a pale solid fill drawn with the Multiply blend mod
 
 ## 16. Redactions are pending annotations until applied, and applying rewrites the whole file
 Erase and redact areas are saved as /Redact annotations (erase marked in /DrawsetData) so they can be reviewed, shared and removed. Applying uses MuPDF's redaction per annotation: text removed, image pixels cleared, and line art removed only when wholly inside the area (MuPDF cannot cut paths). The save that applies them is a full, garbage-collected rewrite, because an incremental save would keep the removed content in the file's earlier revision.
+
+## 17. Overlay compares page content, and shared ink is drawn black
+Overlay renders each page's content without markups, at the same pixels per point, so drawings at one scale line up without alignment. Each pixel's ink is split into what both pages share (drawn black) and what only one page has (drawn red or blue), so identical pages show no colour even along anti-aliased edges. The export is an image of that view in a new PDF whose caption and document subject say it is image-based; nothing in the open documents changes, so there is nothing to undo.

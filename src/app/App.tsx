@@ -1,5 +1,6 @@
 import { MeasurePanel } from "../features/measure/MeasurePanel";
 import { RedactDialog, openRedactDialog } from "../features/redact/RedactDialog";
+import { OverlayDialog, openOverlayDialog } from "../features/overlay/OverlayDialog";
 import { CalibrateDialog, openCalibrateDialog } from "../features/measure/CalibrateDialog";
 import { useEffect, useState } from "react";
 import * as Menu from "@radix-ui/react-dropdown-menu";
@@ -149,6 +150,8 @@ function MenuBar() {
           </div>
         ))}
         <Item label="Review and apply redactions…" onSelect={openRedactDialog} disabled={!has} />
+        <Sep />
+        <Item label="Overlay pages…" onSelect={openOverlayDialog} disabled={!has} />
         <Sep />
         <Item label={useApp.getState().tools.reuse ? "Turn reuse mode off" : "Turn reuse mode on"} shortcut="Ctrl+R" onSelect={() => useApp.setState((s) => ({ tools: { ...s.tools, reuse: !s.tools.reuse } }))} />
       </TopMenu>
@@ -323,6 +326,7 @@ export function App() {
       <PrintDialog />
       <CalibrateDialog />
       <RedactDialog />
+      <OverlayDialog />
       <PreferencesDialog />
       {dragOver && <div className="drop-hint">Drop PDF files to open them</div>}
     </div>

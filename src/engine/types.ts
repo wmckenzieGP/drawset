@@ -94,6 +94,17 @@ export interface SaveResult {
   markups: MarkupRecord[];
 }
 
+/** One page of an image-only PDF: RGBA pixels shown at pageWidth × pageHeight points, under a caption band. */
+export interface ImagePdfPage {
+  width: number;
+  height: number;
+  data: Uint8ClampedArray;
+  pageWidth: number;
+  pageHeight: number;
+  /** One or two lines printed above the image (the first says the page is image-based). */
+  caption: string[];
+}
+
 export interface PdfEngine {
   open(bytes: Uint8Array, name: string): Promise<DocInfo>;
   close(docId: string): Promise<void>;
@@ -111,4 +122,6 @@ export interface PdfEngine {
   save(docId: string, plan: SavePlan, mode: "incremental" | "full"): Promise<SaveResult>;
   /** Writes the plan into a copy and returns its bytes; the open document is unchanged. */
   saveCopy(docId: string, plan: SavePlan): Promise<Uint8Array>;
+  /** A new PDF made of images (overlay export). */
+  imagePdf(pages: ImagePdfPage[], title: string): Promise<Uint8Array>;
 }

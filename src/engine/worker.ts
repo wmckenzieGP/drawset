@@ -17,6 +17,7 @@ const methods: Record<string, Handler> = {
   addBlankPage: (docId: string, w: number, h: number) => core.addBlankPage(docId, w, h),
   save: (docId: string, plan, mode) => core.save(docId, plan, mode),
   saveCopy: (docId: string, plan) => core.saveCopy(docId, plan),
+  imagePdf: (pages, title: string) => core.imagePdf(pages, title),
 };
 
 function isBitmap(v: unknown): v is RawBitmap {
