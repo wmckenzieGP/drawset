@@ -50,3 +50,33 @@ test("markups and measurements", async ({ page }) => {
   await page.waitForTimeout(800);
   await page.screenshot({ path: "docs/screenshots/measurements.png" });
 });
+
+test("overlay, Tool Chest and replies", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto("/");
+  await openFixture(page, "calibration.pdf");
+  await waitForPage(page);
+  await page.getByTestId("tool-cloud").click();
+  await drag(page, await pagePoint(page, 0.55, 0.25), await pagePoint(page, 0.75, 0.45));
+  await page.getByTestId("prop-subject").fill("Fire rating query");
+  await page.getByTestId("prop-subject").press("Enter");
+  await page.getByTestId("reply-input").fill("Is this wall fire rated?");
+  await page.getByTestId("reply-add").click();
+  await page.getByTestId("reply-answer").click();
+  await page.getByTestId("reply-input").fill("Yes, FRL 90/90/90 to the stair core.");
+  await page.getByTestId("reply-add").click();
+  await page.getByTestId("panel-toolchest").click();
+  await page.getByTestId("tc-add").click();
+  await page.getByTestId("tb-markups-list").click();
+  await page.getByTestId("ml-show-replies").check();
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: "docs/screenshots/replies-toolchest.png" });
+
+  await openFixture(page, "dense-a1.pdf");
+  await waitForPage(page);
+  await page.getByTestId("menu-tools").click();
+  await page.getByRole("menuitem", { name: "Overlay pages…" }).click();
+  await page.getByTestId("overlay-b-file").selectOption({ label: "calibration.pdf" });
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: "docs/screenshots/overlay.png" });
+});

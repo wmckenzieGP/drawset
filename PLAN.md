@@ -36,7 +36,7 @@ Each item is about 2 hours or less. Tick `[x]` when its acceptance criteria pass
 - [x] T2.6 Tool Chest: save markup as tool, sets, recents, JSON import/export. *Accept:* a tool reproduces the original markup's properties exactly.
 - [x] T2.7 Replies: threaded replies (/IRT /RT /R) shown in the Markups List. *Accept:* replies round-trip and display.
 - [x] T2.8 Snapping: markup vertices and grid, then page vector endpoints/intersections. *Accept:* snapped points equal target coordinates.
-- [ ] T2.9 Tier 2 release v0.2.
+- [ ] T2.9 Tier 2 release v0.2. (Suite, screenshots, tier report and PR to main done; tag and installer wait on S3.)
 
 ## Tier 3 — Only if ahead (release v0.3)
 - [ ] T3.1 Compare documents (raster diff, clouds listed as markups).

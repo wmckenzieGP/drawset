@@ -292,6 +292,7 @@ textarea:focus {
   width: 270px;
   border-left: 1px solid var(--line);
   overflow-y: auto;
+  overflow-x: hidden;
   flex-direction: column;
 }
 .panel-tabs {
@@ -633,6 +634,7 @@ button.link {
 }
 .replies textarea {
   width: 100%;
+  box-sizing: border-box;
   resize: vertical;
 }
 .replies > .btn {
@@ -640,8 +642,9 @@ button.link {
 }
 .reply-head {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 6px;
+  gap: 0 6px;
   font-size: 11px;
 }
 .reply-actions {
@@ -687,8 +690,15 @@ button.link {
   padding: 5px 8px;
   border-bottom: 1px solid var(--line);
 }
-.ml-toolbar input {
+.ml-toolbar input:not([type="checkbox"]) {
   width: 180px;
+}
+.ml-toolbar > * {
+  white-space: nowrap;
+  flex: none;
+}
+.ml-toolbar .spacer {
+  flex: 1;
 }
 .ml-head,
 .ml-row {
