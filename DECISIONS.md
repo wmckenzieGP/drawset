@@ -14,3 +14,9 @@ Fixed decisions are in SPEC.md ("Decisions"). Everything else is logged here, ne
 | 8 | 16/10/2026 | Saving with a changed page structure (reorder, delete, insert) clears undo history; saving markups or rotations only keeps it. | Page sources are re-based on the saved document. |
 | 9 | 16/10/2026 | Electron serves the built app from a custom `app://` protocol. | MuPDF's WebAssembly and module workers need a real origin; `file://` blocks them. |
 | 10 | 16/10/2026 | Printing renders each page (with or without markups) to a high-resolution image in a print-only view and uses the system print dialog. | Electron cannot print a PDF directly; rasterising for the printer does not change the file. |
+
+## 11. CSV cells that look like formulas get a leading apostrophe
+Markups from other people's files can contain text such as `=HYPERLINK(...)`, which Excel would run when the CSV is opened. Cells starting with `=`, `+`, `-`, `@`, tab or CR get a leading `'` unless the whole cell is a plain number. Spreadsheets show the text unchanged.
+
+## 12. Imported pages bring their markups, not form fields or page links
+MuPDF's `graftPage` copies page content but not /Annots, so annotations are grafted separately with /P rewritten. Widgets need the source file's AcroForm and links to its other pages would drag the whole source page tree along, so those two are left behind.

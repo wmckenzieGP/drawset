@@ -55,7 +55,8 @@ export function sortRows(rows: Row[], key: SortKey, dir: 1 | -1): Row[] {
     const va = val(a);
     const vb = val(b);
     const c = typeof va === "number" || key === "date" ? (va < vb ? -1 : va > vb ? 1 : 0) : collator.compare(va, vb as string);
-    return c !== 0 ? c * dir : a.pageIndex - b.pageIndex || a.modified.localeCompare(b.modified);
+    // ties keep a stable order (creation, then id) so rows do not jump when they are edited
+    return c !== 0 ? c * dir : a.pageIndex - b.pageIndex || a.m.created.localeCompare(b.m.created) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   });
 }
 

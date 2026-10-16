@@ -31,9 +31,13 @@ export function useShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      const typing = !!target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable);
-      if (typing || useInteraction.getState().editingId) return;
       const ctrl = e.ctrlKey || e.metaKey;
+      const tag = target?.tagName;
+      const inputType = tag === "INPUT" ? (target as HTMLInputElement).type : "";
+      // text fields keep their own keys; lists, sliders and tick boxes still pass Ctrl shortcuts (undo, save) through
+      const textEntry = !!target && (tag === "TEXTAREA" || target.isContentEditable || (tag === "INPUT" && !["range", "checkbox", "radio", "button", "color"].includes(inputType)));
+      const control = tag === "SELECT" || (tag === "INPUT" && !textEntry);
+      if (textEntry || (control && !ctrl) || useInteraction.getState().editingId) return;
       const k = e.key.toLowerCase();
       const run = (fn: () => unknown) => {
         e.preventDefault();
@@ -58,7 +62,9 @@ export function useShortcuts() {
         if (k === "0") return run(cmd.fitPage);
         if (k === "1") return run(cmd.actualSize);
         if (k === "2") return run(cmd.fitWidth);
-        if ((k === "=" || k === "+") && e.shiftKey && e.altKey) return run(() => cmd.rotateView(90));
+        // Ctrl+Shift+Plus / Ctrl+Shift+Minus rotate the view (as the View menu shows)
+        if ((k === "=" || k === "+") && e.shiftKey && e.code !== "NumpadAdd") return run(() => cmd.rotateView(90));
+        if ((k === "-" || k === "_") && e.shiftKey && e.code !== "NumpadSubtract") return run(() => cmd.rotateView(-90));
         if (k === "=" || k === "+") return run(cmd.zoomIn);
         if (k === "-") return run(cmd.zoomOut);
         return;

@@ -97,7 +97,7 @@ export function MarkupsList({ tab }: { tab: DocTab }) {
       <div className="ml-toolbar">
         <strong>Markups</strong>
         <span className="muted" data-testid="ml-count">
-          {rows.length} of {allRows.length}
+          {rows.length.toLocaleString("en-AU")} of {allRows.length.toLocaleString("en-AU")}
         </span>
         <input placeholder="Filter" value={filter} onChange={(e) => setFilter(e.target.value)} data-testid="ml-filter" />
         <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} aria-label="Filter by type">
