@@ -4,7 +4,7 @@ Each item is about 2 hours or less. Tick `[x]` when its acceptance criteria pass
 
 ## Setup
 - [x] S1 SPEC.md, CLAUDE.md, PLAN.md, PROGRESS.md, DECISIONS.md. *Accept:* files exist in the repo root.
-- [ ] S2 Fixture generator (`npm run fixtures`). *Accept:* produces dense A1 (~20,000 paths), calibration sheet, 200-page set with planted search terms, scanned page, annotated PDF (several types, unknown and Revu-style private keys), form PDF; a unit test opens each with MuPDF and pdf.js.
+- [x] S2 Fixture generator (`npm run fixtures`). *Accept:* produces dense A1 (~20,000 paths), calibration sheet, 200-page set with planted search terms, scanned page, annotated PDF (several types, unknown and Revu-style private keys), form PDF; a unit test opens each with MuPDF and pdf.js.
 - [ ] S3 GitHub Actions. *Accept:* `ci.yml` runs typecheck, lint, unit and Playwright tests on Ubuntu and builds the NSIS installer on windows-latest; `release.yml` attaches the installer to a GitHub Release on `v*` tags.
 
 ## Tier 1 — Core editor (release v0.1)
