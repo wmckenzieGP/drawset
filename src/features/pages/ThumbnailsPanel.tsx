@@ -38,7 +38,7 @@ function Thumb({ tab, index, selected, current, onClick, onContext, dragOverSide
       <div className="thumb-img" style={{ width: w * k, height: h * k }}>
         {bmp && <canvas ref={ref} style={{ width: "100%", height: "100%" }} />}
       </div>
-      <div className="thumb-label">{entry.info.label}</div>
+      <div className="thumb-label">{entry.label}</div>
     </div>
   );
 }

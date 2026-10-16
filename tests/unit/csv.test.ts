@@ -9,6 +9,7 @@ const pages: PageEntry[] = ["A-101", "A-102", "M-1"].map((label, i) => ({
   src: i,
   rotation: 0,
   scale: null,
+  label,
   info: { index: i, label, bounds: [0, 0, 1190, 842], rotate: 0 } as PageEntry["info"],
 }));
 

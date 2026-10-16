@@ -49,7 +49,7 @@ const CASES: Partial<Record<MarkupKind, Partial<Markup>>> = {
   angle: { points: [[100, 200], [150, 100], [250, 120]], measure: { scale: SCALE, cutouts: [] } },
 };
 
-const page: PageEntry = { id: "p0", src: 0, info: { index: 0, bounds: [0, 0, 595, 842], rotate: 0, label: "1", ctm: [1, 0, 0, -1, 0, 842], scale: SCALE }, rotation: 0, scale: SCALE };
+const page: PageEntry = { id: "p0", src: 0, info: { index: 0, bounds: [0, 0, 595, 842], rotate: 0, label: "1", ctm: [1, 0, 0, -1, 0, 842], scale: SCALE }, rotation: 0, scale: SCALE, label: "1" };
 
 /** The properties a tool must reproduce: everything but identity, author, dates and file links. */
 function props(m: Omit<Markup, "pageId"> & { pageIndex?: number }) {

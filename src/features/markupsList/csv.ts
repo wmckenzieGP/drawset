@@ -38,7 +38,7 @@ export function markupRows(markups: Record<string, Markup>, pages: PageEntry[]):
     rows.push({
       id: m.id,
       pageIndex: pi,
-      page: pages[pi].info.label,
+      page: pages[pi].label,
       type: m.kind === "foreign" ? m.subtype : KIND_LABELS[m.kind],
       subject: m.subject,
       author: m.author,

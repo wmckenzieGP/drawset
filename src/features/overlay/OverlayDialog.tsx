@@ -71,7 +71,7 @@ export function composeOverlay(a: ImageBitmap, b: ImageBitmap, m: Matrix, showA:
 
 const pageLabel = (tabs: DocTab[], s: Side) => {
   const e = pageEntry(tabs, s);
-  return e ? `${e.tab.name} page ${e.page.info.label || s.page + 1}` : "";
+  return e ? `${e.tab.name} page ${e.page.label || s.page + 1}` : "";
 };
 
 export function OverlayDialog() {
@@ -274,7 +274,7 @@ export function OverlayDialog() {
           <select value={s.page} onChange={(e) => set({ ...s, page: Number(e.target.value) })} data-testid={`${testId}-page`}>
             {t?.state.pages.map((p, i) => (
               <option key={p.id} value={i}>
-                {p.info.label || i + 1}
+                {p.label || i + 1}
               </option>
             ))}
           </select>

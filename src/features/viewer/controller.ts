@@ -38,7 +38,7 @@ type DragState =
   | { t: "move"; page: PageLayout; start: Pt; last: Pt; originals: Markup[]; moved: boolean }
   | { t: "resize"; page: PageLayout; original: Markup; handle: Handle; frame: Rect; current: Markup }
   | { t: "vertex"; page: PageLayout; original: Markup; index: number; current: Markup }
-  | { t: "box"; kind: MarkupKind | "zoom"; page: PageLayout; a: Pt; b: Pt; moved: boolean }
+  | { t: "box"; kind: MarkupKind | "zoom" | "labelregion"; page: PageLayout; a: Pt; b: Pt; moved: boolean }
   | { t: "line"; kind: "line" | "arrow" | "length" | "calibrate"; page: PageLayout; a: Pt; b: Pt }
   | { t: "callout"; page: PageLayout; tip: Pt; b: Pt }
   | { t: "ink"; kind: "pen" | "highlighter"; page: PageLayout; pts: Pt[] }
@@ -49,11 +49,14 @@ type PolyKind = "polyline" | "polygon" | "cloud" | "polylength" | "area" | "peri
 const POLY_TOOLS = new Set<ToolId>(["polyline", "polygon", "cloud", "polylength", "area", "perimeter", "count", "angle", "cutout"]);
 
 /** Where calibration picks go: the dialog listens. */
+/** The title-block region drawn for labelling pages, waiting for the dialog. */
+export const useLabelRegionPick = create<{ pick: { pageId: string; rect: Rect } | null }>(() => ({ pick: null }));
+
 export const useCalibrationPick = create<{ pick: { pageId: string; a: Pt; b: Pt } | null }>(() => ({ pick: null }));
 
 /** Tools whose points snap. Freehand, text and zoom tools do not. */
 const SNAP_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "textbox", "callout", "note", "stamp", "image", "length", "polylength", "area", "perimeter", "count", "angle", "calibrate", "cutout", "redact", "erase", "chest"]);
-const BOX_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "textbox", "stamp", "image", "zoom", "redact", "erase"]);
+const BOX_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "textbox", "stamp", "image", "zoom", "redact", "erase", "labelregion"]);
 const TEXT_TOOLS = new Set<ToolId>(["text", "highlight", "underline", "strikeout"]);
 
 export class Controller {
@@ -161,7 +164,7 @@ export class Controller {
     const d = this.drag;
     switch (d.t) {
       case "box": {
-        if (!d.moved || d.kind === "zoom") return null;
+        if (!d.moved || d.kind === "zoom" || d.kind === "labelregion") return null;
         if (d.kind === "stamp") return { page: d.page, m: stampAt(d.page.entry.id, d.a, d.b) };
         if (d.kind === "image") {
           const m = imageAt(d.page.entry.id, d.a, d.b);
@@ -198,7 +201,7 @@ export class Controller {
   marquee(): { page: PageLayout; r: Rect } | null {
     const d = this.drag;
     if (d.t === "marquee") return { page: d.page, r: normRect([d.a[0], d.a[1], d.b[0], d.b[1]]) };
-    if (d.t === "box" && d.kind === "zoom" && d.moved) return { page: d.page, r: normRect([d.a[0], d.a[1], d.b[0], d.b[1]]) };
+    if (d.t === "box" && (d.kind === "zoom" || d.kind === "labelregion") && d.moved) return { page: d.page, r: normRect([d.a[0], d.a[1], d.b[0], d.b[1]]) };
     return null;
   }
 
@@ -292,7 +295,7 @@ export class Controller {
     const raw = this.toPage(page, c);
     const p = SNAP_TOOLS.has(tool) ? this.snapAt(page, raw, e) : raw;
     if (BOX_TOOLS.has(tool)) {
-      this.drag = { t: "box", kind: tool as MarkupKind | "zoom", page, a: p, b: p, moved: false };
+      this.drag = { t: "box", kind: tool as MarkupKind | "zoom" | "labelregion", page, a: p, b: p, moved: false };
     } else if (tool === "line" || tool === "arrow" || tool === "length" || tool === "calibrate") {
       this.drag = { t: "line", kind: tool, page, a: p, b: p };
     } else if (tool === "callout") {
@@ -386,7 +389,7 @@ export class Controller {
         break;
       }
       case "box":
-        d.b = e.shiftKey ? snapSquare(d.a, p) : d.kind === "zoom" ? p : this.snapAt(d.page, p, e);
+        d.b = e.shiftKey ? snapSquare(d.a, p) : d.kind === "zoom" || d.kind === "labelregion" ? p : this.snapAt(d.page, p, e);
         if (!d.moved && dist(d.a, d.b) > this.tol(d.page, 3)) d.moved = true;
         break;
       case "line":
@@ -485,6 +488,11 @@ export class Controller {
         break;
       case "box": {
         const pid = d.page.entry.id;
+        if (d.kind === "labelregion") {
+          if (d.moved) useLabelRegionPick.setState({ pick: { pageId: pid, rect: normRect([d.a[0], d.a[1], d.b[0], d.b[1]]) } });
+          useApp.setState((s) => ({ tools: { ...s.tools, tool: "select", chest: null } }));
+          break;
+        }
         if (d.kind === "zoom") {
           if (d.moved) this.host.zoomToRect(d.page, normRect([d.a[0], d.a[1], d.b[0], d.b[1]]));
           else this.host.zoomBy(e.altKey ? 0.5 : 2, e.clientX, e.clientY);

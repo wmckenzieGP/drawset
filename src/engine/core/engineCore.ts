@@ -10,6 +10,7 @@ import { readPageMarkups } from "./annotRead";
 import { deleteAnnotationTree, ensurePopup, invertCtm, PRIVATE_KEY, subtypeFor, writeMarkup, writeReplies, writeStatus, type WriteContext } from "./annotWrite";
 import { buildImagePdf } from "./imagePdf";
 import { collectSnapGeometry } from "./snapGeometry";
+import { textInRect, writeOutline, writePageLabels } from "./labels";
 import { safePageScale, writePageScale } from "./measureDict";
 
 export interface RawBitmap {
@@ -379,10 +380,14 @@ export class EngineCore {
       if (curV !== p.rotate) pageObj.put("Rotate", doc.newInteger(p.rotate));
     }
     if (plan.flatten) doc.bake(true, false);
+    // the outline points at page objects, so it is written before pages move
+    if (plan.outline) writeOutline(doc, plan.outline);
     // page order (also drops pages not listed)
     const order = plan.pages.map((p) => p.index);
     const identity = order.length === pageCount && order.every((v, i) => v === i);
     if (!identity) doc.rearrangePages(order);
+    // labels are by position, so they are written for the final order
+    if (plan.pageLabels) writePageLabels(doc, plan.pageLabels);
   }
 
   /**
@@ -409,6 +414,11 @@ export class EngineCore {
     const bytes = d.doc.saveToBuffer(incremental ? "incremental" : "compress,garbage=compact").asUint8Array().slice();
     const info = this.open(bytes, d.name, docId);
     return { bytes, info, markups: this.readMarkups(docId) };
+  }
+
+  textInRect(docId: string, pages: number[], rect: Rect): string[] {
+    const d = this.get(docId);
+    return pages.map((i) => textInRect(this.stextFor(d, i), rect));
   }
 
   snapGeometry(docId: string, pageIndex: number): SnapGeometry {

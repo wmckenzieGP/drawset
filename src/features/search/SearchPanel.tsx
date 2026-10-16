@@ -114,7 +114,7 @@ export function SearchPanel({ tab }: { tab: DocTab }) {
           return (
             <li key={page}>
               <button className={idxs.includes(current) ? "active" : ""} onClick={() => goToHit(tab.key, idxs[0])}>
-                Page {tab.state.pages[pi].info.label} <span className="muted">({idxs.length})</span>
+                Page {tab.state.pages[pi].label} <span className="muted">({idxs.length})</span>
               </button>
             </li>
           );

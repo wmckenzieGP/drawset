@@ -64,7 +64,15 @@ export function buildPlan(t: DocTab, state: DocState = t.state, opts: { flatten?
   for (const m of Object.values(t.saved.markups)) {
     if (!state.markups[m.id] && m.objNum !== undefined) deletes.push(m.objNum);
   }
+  // labels go by position: write them when one changed, or when pages moved in a file that has its own labels
+  const labelsChanged = pages.some((p) => p.label !== p.info.label);
+  const moved = pages.length !== t.info.pageCount || pages.some((p, i) => p.src !== i);
+  const ownLabels = t.info.pages.some((p, i) => p.label !== String(i + 1));
+  const pageLabels = labelsChanged || (moved && ownLabels) ? pages.map((p, i) => p.label || String(i + 1)) : undefined;
+  const outline = !opts.pageIds && state.outline && state.outline !== t.saved.outline ? state.outline : undefined;
   return {
+    ...(pageLabels ? { pageLabels } : {}),
+    ...(outline ? { outline } : {}),
     pages: pages.map((p) => ({ index: p.src, rotate: (p.info.rotate + p.rotation) % 360, ...(sameScale(p.scale, p.info.scale) ? {} : { scale: p.scale }) })),
     upserts,
     deletes,

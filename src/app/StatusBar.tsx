@@ -24,7 +24,7 @@ export function StatusBar() {
   const [goto, setGoto] = useState<string | null>(null);
   const [zoomText, setZoomText] = useState<string | null>(null);
   if (!tab) return <div className="statusbar"><span>Ready</span></div>;
-  const labels = tab.state.pages.map((p) => p.info.label);
+  const labels = tab.state.pages.map((p) => p.label);
   const n = tab.state.pages.length;
   const cur = Math.min(tab.currentPage, n - 1);
   const label = labels[cur] ?? "";

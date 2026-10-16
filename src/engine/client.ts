@@ -75,6 +75,9 @@ export class WorkerEngine implements PdfEngine {
   saveCopy(docId: string, plan: SavePlan) {
     return this.call<Uint8Array>("saveCopy", [docId, plan]);
   }
+  textInRect(docId: string, pages: number[], rect: Rect) {
+    return this.call<string[]>("textInRect", [docId, pages, rect]);
+  }
   snapGeometry(docId: string, page: number) {
     return this.call<SnapGeometry>("snapGeometry", [docId, page]);
   }

@@ -1,11 +1,13 @@
 import { MeasurePanel } from "../features/measure/MeasurePanel";
 import { RedactDialog, openRedactDialog } from "../features/redact/RedactDialog";
 import { ToolChestPanel, addSelectionToChest } from "../features/toolchest/ToolChestPanel";
+import { LabelRegionDialog, startLabelRegion } from "../features/pages/LabelRegionDialog";
+import { bookmarksFromLabels } from "../features/pages/labelRegion";
 import { OverlayDialog, openOverlayDialog } from "../features/overlay/OverlayDialog";
 import { CalibrateDialog, openCalibrateDialog } from "../features/measure/CalibrateDialog";
 import { useEffect, useState } from "react";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { activeTab, isDirty, toggleSplit, useApp, type SplitState, type ToolId } from "../state/store";
+import { activeTab, commit, isDirty, toggleSplit, useApp, type SplitState, type ToolId } from "../state/store";
 import { closeTab, openFiles, openPath } from "../state/documents";
 import { clearRecent, desktop, fileToOpened, isDesktop, recentFiles } from "../platform/host";
 import { Viewer } from "../features/viewer/Viewer";
@@ -177,6 +179,9 @@ function MenuBar() {
         <Item label="Split document…" onSelect={() => openPageDialog("split")} disabled={!has} />
         <Sep />
         <Item label="Set page scale…" onSelect={openCalibrateDialog} disabled={!has} />
+        <Sep />
+        <Item label="Label pages from title block…" onSelect={startLabelRegion} disabled={!has} />
+        <Item label="Make bookmarks from page labels" onSelect={() => tab && commit(tab.key, "Make bookmarks", (s) => ({ ...s, outline: bookmarksFromLabels(s) }))} disabled={!has} />
       </TopMenu>
     </div>
   );
@@ -355,6 +360,7 @@ export function App() {
       <CalibrateDialog />
       <RedactDialog />
       <OverlayDialog />
+      <LabelRegionDialog />
       <PreferencesDialog />
       {dragOver && <div className="drop-hint">Drop PDF files to open them</div>}
     </div>

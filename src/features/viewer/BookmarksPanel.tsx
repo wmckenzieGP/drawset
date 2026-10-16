@@ -32,7 +32,7 @@ function Node({ tab, node, depth }: { tab: DocTab; node: OutlineNode; depth: num
 }
 
 export function BookmarksPanel({ tab }: { tab: DocTab }) {
-  const outline = tab.info.outline;
+  const outline = tab.state.outline ?? tab.info.outline;
   return (
     <div className="panel-body">
       <div className="panel-title">Bookmarks</div>

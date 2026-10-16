@@ -83,6 +83,10 @@ export interface SavePlan {
   deletes: number[];
   /** Burn markups into page content (permanent). */
   flatten?: boolean;
+  /** Page labels for the saved pages, in plan order; omitted when unchanged. */
+  pageLabels?: string[];
+  /** Replacement document outline (pages are physical indices); omitted when unchanged. */
+  outline?: OutlineNode[];
   /** Apply every redaction and erase (removes content; forces a full rewrite so no old revision keeps it). */
   applyRedactions?: boolean;
   defaultAuthor: string;
@@ -132,6 +136,8 @@ export interface PdfEngine {
   save(docId: string, plan: SavePlan, mode: "incremental" | "full"): Promise<SaveResult>;
   /** Writes the plan into a copy and returns its bytes; the open document is unchanged. */
   saveCopy(docId: string, plan: SavePlan): Promise<Uint8Array>;
+  /** Text inside `rect` (page space) on each of `pages`, for labelling pages from a title-block region. */
+  textInRect(docId: string, pages: number[], rect: Rect): Promise<string[]>;
   /** Vector geometry of a page's content (markups excluded) for snapping. */
   snapGeometry(docId: string, page: number): Promise<SnapGeometry>;
   /** A new PDF made of images (overlay export). */

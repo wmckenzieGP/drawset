@@ -41,7 +41,7 @@ export function RedactDialog() {
                   return (
                     <li key={m.id}>
                       <button className="link" onClick={() => scrollToPage(tab.key, i, markupBounds(m))}>
-                        Page {tab.state.pages[i].info.label}
+                        Page {tab.state.pages[i].label}
                       </button>{" "}
                       {m.kind === "redact" ? "Redaction" : "Erase"}
                       {m.contents ? <span className="muted"> “{m.contents.slice(0, 60)}”</span> : null}

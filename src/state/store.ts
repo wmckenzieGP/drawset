@@ -4,7 +4,7 @@
  */
 import type { ChestTool } from "../features/toolchest/chest";
 import { create } from "zustand";
-import type { DocInfo, MarkupRecord, PageInfo, SearchHit } from "../engine/types";
+import type { DocInfo, MarkupRecord, OutlineNode, PageInfo, SearchHit } from "../engine/types";
 import type { Quad, Rect } from "../markup/geometry";
 import { DEFAULT_STYLE, type Markup, type MarkupKind, type MarkupStyle } from "../markup/model";
 import { isMeasure, type PageScale } from "../markup/measure";
@@ -20,11 +20,15 @@ export interface PageEntry {
   rotation: Rotation;
   /** Page scale for measurements (starts as the file's; null when uncalibrated). */
   scale: PageScale | null;
+  /** Page label (starts as the file's). */
+  label: string;
 }
 
 export interface DocState {
   pages: PageEntry[];
   markups: Record<string, Markup>;
+  /** Replacement bookmarks; undefined keeps the file's. Pages are physical indices. */
+  outline?: OutlineNode[];
 }
 
 export interface ViewState {
@@ -82,6 +86,8 @@ export type ToolId =
   | "cutout"
   /** Places a copy of the active Tool Chest tool. */
   | "chest"
+  /** Draws the title-block box that pages are labelled from. */
+  | "labelregion"
   | MarkupKind;
 
 export interface ToolState {
@@ -242,7 +248,7 @@ export function updateTab(key: string, fn: (t: DocTab) => DocTab) {
 }
 
 export function pagesFromInfo(info: DocInfo): PageEntry[] {
-  return info.pages.map((p) => ({ id: newPageId(), src: p.index, info: p, rotation: 0, scale: p.scale }));
+  return info.pages.map((p) => ({ id: newPageId(), src: p.index, info: p, rotation: 0, scale: p.scale, label: p.label }));
 }
 
 /** Converts records read from the engine into markups attached to page entries (by physical index). */

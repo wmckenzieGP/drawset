@@ -44,3 +44,6 @@ Each reply is a /Text annotation with /IRT (the markup, or the reply it answers)
 
 ## 20. Snapping order and tolerance
 Within 8 screen pixels the nearest markup vertex or drawing end point wins; only when there is none does a crossing of two drawing lines count; only when there is neither does the grid apply. Curves offer their end points but not intersections. Snapping is off while Shift constrains an angle or Alt is held, and freehand pen, highlighter, text and zoom tools never snap. MuPDF reads content-stream numbers in single precision, so a snapped point equals the drawn coordinate to about 1e-5 pt.
+
+## 21. Page labels are written as one prefix per page
+Labels read from title blocks are arbitrary text, so /PageLabels gives each page its own range with the label as /P and no numbering style; every viewer shows exactly that text. When pages are reordered or deleted in a file that has its own labels, the labels are rewritten for the new order so each stays with its sheet. Generated bookmarks replace the old ones (undoable) and point at the page objects with /Fit.
