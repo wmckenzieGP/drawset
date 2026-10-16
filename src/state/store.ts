@@ -107,6 +107,18 @@ export interface AppState {
   message: { text: string; kind: "info" | "error" } | null;
   busy: string | null;
   snap: SnapSettings;
+  /** Two documents side by side; the focused pane follows the active tab. */
+  split: SplitState | null;
+}
+
+export type Pane = "left" | "right";
+
+export interface SplitState {
+  left: string;
+  right: string;
+  focus: Pane;
+  /** Pan, zoom and page follow the pane being used. */
+  sync: boolean;
 }
 
 export interface SnapSettings {
@@ -181,7 +193,41 @@ export const useApp = create<AppState>(() => ({
   message: null,
   busy: null,
   snap: loadSnap(),
+  split: null,
 }));
+
+// the focused split pane shows whatever tab becomes active; closed tabs leave the split
+useApp.subscribe((s, prev) => {
+  const sp = s.split;
+  if (!sp) return;
+  const keys = new Set(s.tabs.map((t) => t.key));
+  if (!keys.has(sp.left) || !keys.has(sp.right)) {
+    const left = keys.has(sp.left) ? sp.left : sp.right;
+    const right = keys.has(sp.right) ? sp.right : sp.left;
+    useApp.setState({ split: keys.has(left) && keys.has(right) && s.tabs.length > 1 && left !== right ? { ...sp, left, right } : null });
+    return;
+  }
+  if (s.active && s.active !== prev.active && s.active !== sp[sp.focus]) useApp.setState({ split: { ...sp, [sp.focus]: s.active } });
+});
+
+export function toggleSplit() {
+  const s = useApp.getState();
+  if (s.split) {
+    useApp.setState({ split: null });
+    return;
+  }
+  const a = activeTab(s);
+  if (!a) return;
+  const other = s.tabs.find((t) => t.key !== a.key) ?? a;
+  useApp.setState({ split: { left: a.key, right: other.key, focus: "left", sync: true } });
+}
+
+export function focusPane(pane: Pane) {
+  const sp = useApp.getState().split;
+  if (!sp) return;
+  if (sp.focus !== pane) useApp.setState({ split: { ...sp, focus: pane } });
+  if (useApp.getState().active !== sp[pane]) useApp.setState({ active: sp[pane] });
+}
 
 let tabSeq = 1;
 let pageSeq = 1;

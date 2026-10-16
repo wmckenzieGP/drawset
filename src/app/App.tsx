@@ -5,7 +5,7 @@ import { OverlayDialog, openOverlayDialog } from "../features/overlay/OverlayDia
 import { CalibrateDialog, openCalibrateDialog } from "../features/measure/CalibrateDialog";
 import { useEffect, useState } from "react";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { activeTab, isDirty, useApp, type ToolId } from "../state/store";
+import { activeTab, isDirty, toggleSplit, useApp, type SplitState, type ToolId } from "../state/store";
 import { closeTab, openFiles, openPath } from "../state/documents";
 import { clearRecent, desktop, fileToOpened, isDesktop, recentFiles } from "../platform/host";
 import { Viewer } from "../features/viewer/Viewer";
@@ -92,6 +92,7 @@ function MenuBar() {
   const tab = useApp(activeTab);
   const has = !!tab;
   const sel = tab ? tab.selection.length : 0;
+  const split = useApp((s) => s.split);
   return (
     <div className="menubar" role="menubar">
       <div className="brand">
@@ -140,6 +141,9 @@ function MenuBar() {
         <Item label="Bookmarks" onSelect={() => useApp.setState((s) => ({ leftPanel: s.leftPanel === "bookmarks" ? null : "bookmarks" }))} />
         <Item label="Search" shortcut="Ctrl+F" onSelect={() => useApp.setState({ leftPanel: "search" })} />
         <Item label="Tool Chest" onSelect={() => useApp.setState((s) => ({ leftPanel: s.leftPanel === "toolchest" ? null : "toolchest" }))} />
+        <Item label={split ? "Close split view" : "Split view"} onSelect={toggleSplit} disabled={!has} />
+        <Item label={split?.sync === false ? "Sync split panes" : "Stop syncing split panes"} onSelect={() => split && useApp.setState({ split: { ...split, sync: !split.sync } })} disabled={!split} />
+        <Sep />
         <Item label="Properties" onSelect={() => useApp.setState((s) => ({ rightPanel: !s.rightPanel }))} />
         <Item label="Markups List" shortcut="Alt+L" onSelect={() => useApp.setState((s) => ({ bottomPanel: !s.bottomPanel }))} />
       </TopMenu>
@@ -253,11 +257,29 @@ function Toast() {
   );
 }
 
+function SplitPanes({ split }: { split: SplitState }) {
+  const tabs = useApp((s) => s.tabs);
+  return (
+    <div className="split" data-testid="split">
+      {(["left", "right"] as const).map((pane) => {
+        const t = tabs.find((x) => x.key === split[pane]);
+        return (
+          <div key={pane} className={`split-pane ${split.focus === pane ? "focused" : ""}`} data-testid={`split-${pane}`}>
+            <div className="split-title">{t?.name}</div>
+            {t && <Viewer key={`${pane}:${t.key}`} tab={t} pane={pane} />}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function App() {
   const tab = useApp(activeTab);
   const leftPanel = useApp((s) => s.leftPanel);
   const rightPanel = useApp((s) => s.rightPanel);
   const bottomPanel = useApp((s) => s.bottomPanel);
+  const split = useApp((s) => s.split);
   const [dragOver, setDragOver] = useState(false);
   useShortcuts();
 
@@ -316,7 +338,7 @@ export function App() {
           </aside>
         )}
         <section className="center">
-          {tab ? <Viewer key={tab.key} tab={tab} /> : <Welcome />}
+          {tab && split ? <SplitPanes split={split} /> : tab ? <Viewer key={tab.key} tab={tab} /> : <Welcome />}
           {tab && bottomPanel && <MarkupsList tab={tab} />}
         </section>
         {tab && rightPanel && (

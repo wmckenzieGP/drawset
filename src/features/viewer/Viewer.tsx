@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { transformRect, type Rect } from "../../markup/geometry";
-import { setView, updateTab, useApp, type DocTab } from "../../state/store";
+import { focusPane, setView, updateTab, useApp, type DocTab, type Pane } from "../../state/store";
+import { followPane, leadPane, publishPosition } from "./splitSync";
 import { Controller, useInteraction, type ViewerHost } from "./controller";
 import { computeLayout, visibleRange, type Layout, type PageLayout } from "./layout";
-import { drawOverlay, setBitmapListener } from "./overlay";
+import { drawOverlay, addBitmapListener } from "./overlay";
 import { previewScale, renderCache, TILE } from "./renderCache";
 import { TextEditor } from "./TextEditor";
 
@@ -63,7 +64,7 @@ function PageView({ tab, page, view, dpr }: { tab: DocTab; page: PageLayout; vie
   );
 }
 
-export function Viewer({ tab }: { tab: DocTab }) {
+export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const normalRef = useRef<HTMLCanvasElement>(null);
   const multiplyRef = useRef<HTMLCanvasElement>(null);
@@ -175,12 +176,46 @@ export function Viewer({ tab }: { tab: DocTab }) {
     redraw();
   });
   useEffect(() => {
-    setBitmapListener(redraw);
+    const unBitmap = addBitmapListener(redraw);
     const unsub = renderCache.subscribe(bump);
     return () => {
+      unBitmap();
       unsub();
     };
   }, [redraw]);
+
+  // split view: follow the other pane (same page, same spot, same zoom)
+  useEffect(() => {
+    if (!pane) return;
+    return followPane(pane, (pos) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const place = () => {
+        const p = layoutRef.current.pages[Math.min(pos.page, layoutRef.current.pages.length - 1)];
+        if (!p) return;
+        el.scrollLeft = p.x + pos.px * p.w - el.clientWidth / 2;
+        el.scrollTop = p.y + pos.py * p.h - el.clientHeight / 2;
+      };
+      if (Math.abs(tabRef.current.view.scale - pos.scale) > 1e-9) {
+        setView(tabRef.current.key, { scale: pos.scale });
+        requestAnimationFrame(place);
+      } else place();
+    });
+  }, [pane]);
+  // zoom changes lead too (scrolling alone does not fire when the position stays put)
+  useEffect(() => {
+    requestAnimationFrame(() => publish());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab.view.scale]);
+  const publish = () => {
+    const el = scrollRef.current;
+    if (!pane || !el) return;
+    const cx = el.scrollLeft + el.clientWidth / 2;
+    const cy = el.scrollTop + el.clientHeight / 2;
+    const [a] = visibleRange(layoutRef.current, cy, cy);
+    const p = layoutRef.current.pages[a];
+    if (p) publishPosition(pane, { page: a, px: (cx - p.x) / p.w, py: (cy - p.y) / p.h, scale: tabRef.current.view.scale });
+  };
 
   // viewport size
   useLayoutEffect(() => {
@@ -233,6 +268,7 @@ export function Viewer({ tab }: { tab: DocTab }) {
     const [a] = visibleRange(layout, mid, mid);
     const cur = layout.pages[a] && layout.pages[a].y <= mid + 8 ? a : Math.max(0, a - 1);
     if (cur !== tabRef.current.currentPage) updateTab(tab.key, (t) => ({ ...t, currentPage: cur }));
+    publish();
   };
 
   // wheel zoom (non-passive so the page does not scroll)
@@ -270,6 +306,8 @@ export function Viewer({ tab }: { tab: DocTab }) {
   // keyboard: space for pan, Enter/Escape/Backspace for drawing
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      // with two panes open, keys go to the pane in use
+      if (pane && useApp.getState().split?.focus !== pane) return;
       const target = e.target as HTMLElement;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
       if (e.code === "Space" && !useInteraction.getState().spaceDown) {
@@ -288,7 +326,7 @@ export function Viewer({ tab }: { tab: DocTab }) {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
     };
-  }, [controller]);
+  }, [controller, pane]);
 
   // tool change cancels drawing
   const tool = useApp((s) => s.tools.tool);
@@ -307,7 +345,16 @@ export function Viewer({ tab }: { tab: DocTab }) {
   if (editing && editingPage) editorRect = controller.contentRect(editingPage, editing.rect);
 
   return (
-    <div className="viewer-wrap">
+    <div
+      className="viewer-wrap"
+      onPointerEnter={() => pane && leadPane(pane)}
+      onWheelCapture={() => pane && leadPane(pane)}
+      onPointerDownCapture={() => {
+        if (!pane) return;
+        leadPane(pane);
+        focusPane(pane);
+      }}
+    >
       <div
         className="viewer"
         ref={scrollRef}

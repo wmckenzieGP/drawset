@@ -40,7 +40,7 @@ Each item is about 2 hours or less. Tick `[x]` when its acceptance criteria pass
 
 ## Tier 3 — Only if ahead (release v0.3)
 - [x] T3.1 Compare documents (raster diff, clouds listed as markups). *Accept:* a revised sheet gets one cloud around each change and none elsewhere; identical pages get none.
-- [ ] T3.2 Split view with synced pan, zoom and page.
+- [x] T3.2 Split view with synced pan, zoom and page. *Accept:* scrolling or zooming one pane moves the other to the same page, spot and zoom; sync can be turned off.
 - [ ] T3.3 Page labels from a title-block region; bookmarks from labels.
 - [ ] T3.4 Forms: fill, save, flatten.
 - [ ] T3.5 Headers, footers and watermarks with date, file name, page label and "page n of N" variables.

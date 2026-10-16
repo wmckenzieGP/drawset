@@ -2,7 +2,7 @@
 
 **Current item:** T1.18 Tier 1 release (waiting on S3 for the Windows build)
 **Last finished:** T1.17 print
-**Next up:** T3.2 split view (v0.1/v0.2 tags and installers wait on S3) (Tier 2 continues while S3 is blocked)
+**Next up:** T3.3 page labels from a title-block region (v0.1/v0.2 tags and installers wait on S3) (Tier 2 continues while S3 is blocked)
 
 ## How to install
 Download `Drawset-Setup-<version>.exe` from the latest GitHub Release (https://github.com/wmckenziegp/drawset/releases) and run it. Windows SmartScreen may warn because the installer is not code-signed: choose "More info" then "Run anyway".
@@ -38,3 +38,4 @@ Download `Drawset-Setup-<version>.exe` from the latest GitHub Release (https://g
 All Tier 2 items are built and tested: calibration, six measurement types with quantities, erase and redact, overlay pages, Tool Chest, threaded replies and snapping. Typecheck and lint clean; 75 unit and 23 browser tests pass. The v0.1 and v0.2 tags and installers wait on the workflow files (S3). Full report: docs/TIER-REPORTS.md. PR #1 brings main up to date.
 
 - T3.1: Tools > Compare documents (the overlay dialog) clouds every changed area on the red file, the newer revision: "Cloud changes" for the shown pair, "Cloud changes, all pages" page by page, using the two-point alignment when set. Changes are found per 8-pixel cell and joined when close, so a revised detail gets one cloud; pages that differ throughout are skipped with a warning. Clouds have subject "Compare" and say what they were compared with; all are one undo step. New fixture calibration-rev.pdf; unit and e2e tests check one cloud per change and none for identical pages.
+- T3.2: View > Split view shows two files (or the same file twice) side by side. The pane under the pointer leads: the other follows to the same page, the same spot on it and the same zoom; View > Stop syncing split panes lets them move freely. Clicking a pane makes its file active, so menus, shortcuts and panels act on it; choosing a tab shows it in the focused pane. Keyboard shortcuts only reach the focused pane. E2E covers zoom, scroll, page and focus sync and sync off.

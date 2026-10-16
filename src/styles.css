@@ -1126,3 +1126,31 @@ input.small {
   height: 18px;
   font-size: 11px;
 }
+
+.split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 2px;
+  background: var(--line);
+}
+.split-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+  border-top: 2px solid transparent;
+}
+.split-pane.focused {
+  border-top-color: var(--accent);
+}
+.split-title {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 2px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

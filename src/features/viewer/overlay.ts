@@ -12,9 +12,11 @@ import { markupsInRect } from "./markupIndex";
 // ---- bitmaps for annotations drawn from their own appearance, and for image markups ----
 const apBitmaps = new Map<string, ImageBitmap | "pending" | "failed">();
 const imageBitmaps = new WeakMap<Uint8Array, ImageBitmap | "pending">();
-let onBitmap: (() => void) | null = null;
-export function setBitmapListener(fn: () => void) {
-  onBitmap = fn;
+const bitmapListeners = new Set<() => void>();
+/** Calls `fn` whenever an appearance bitmap arrives; returns the unsubscribe function. */
+export function addBitmapListener(fn: () => void): () => void {
+  bitmapListeners.add(fn);
+  return () => bitmapListeners.delete(fn);
 }
 export function invalidateApBitmaps(docId: string) {
   for (const k of [...apBitmaps.keys()]) if (k.startsWith(docId + ":")) apBitmaps.delete(k);
@@ -33,7 +35,7 @@ function apBitmap(tab: DocTab, page: PageLayout, m: Markup, devScale: number): I
     .renderAnnotation(tab.docId, page.entry.src, objNum, bucket)
     .then((b) => {
       if (b.image) apBitmaps.set(key, b.image);
-      onBitmap?.();
+      bitmapListeners.forEach((f) => f());
     })
     .catch(() => apBitmaps.set(key, "failed"));
   return null;
@@ -48,7 +50,7 @@ export function markupImage(m: Markup): ImageBitmap | null {
   createImageBitmap(new Blob([m.image.data as Uint8Array<ArrayBuffer>], { type: m.image.mime }))
     .then((b) => {
       imageBitmaps.set(m.image!.data, b);
-      onBitmap?.();
+      bitmapListeners.forEach((f) => f());
     })
     .catch(() => undefined);
   return null;
