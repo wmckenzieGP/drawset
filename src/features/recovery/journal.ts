@@ -4,7 +4,7 @@
  * closed; one that is still there at the next start means Drawset did not close normally, and is offered back.
  * Passwords are never journaled.
  */
-import type { OutlineNode } from "../../engine/types";
+import type { OcrPage, OutlineNode } from "../../engine/types";
 import type { Markup } from "../../markup/model";
 import { desktop } from "../../platform/host";
 import { isDirty, newPageId, useApp, type DocState, type DocTab, type PageEntry } from "../../state/store";
@@ -28,6 +28,8 @@ export interface JournalEntry {
   outline?: OutlineNode[];
   fields?: Record<string, string>;
   headerFooter?: HFSpec | null;
+  /** Recognised text by physical page. */
+  ocr?: Record<number, OcrPage | null>;
   /** Pages inserted from other files cannot be journaled (their content is only in memory). */
   skippedPages: number;
   /** A pending security change was not journaled (it holds passwords). */
@@ -73,6 +75,7 @@ export function journalFor(t: DocTab, sha256: string, id: string): JournalEntry 
     ...(s.outline ? { outline: s.outline } : {}),
     ...(s.fields ? { fields: s.fields } : {}),
     ...(s.headerFooter !== undefined ? { headerFooter: s.headerFooter } : {}),
+    ...(s.ocr ? { ocr: Object.fromEntries(Object.entries(s.ocr).filter(([src]) => Number(src) < t.info.pageCount)) } : {}),
     skippedPages: s.pages.length - kept.length,
     securityDropped: s.security !== undefined,
   };
@@ -110,6 +113,7 @@ export function stateFromJournal(t: DocTab, j: JournalEntry): DocState {
     ...(j.outline ? { outline: j.outline } : {}),
     ...(j.fields ? { fields: j.fields } : {}),
     ...(j.headerFooter !== undefined ? { headerFooter: j.headerFooter } : {}),
+    ...(j.ocr ? { ocr: j.ocr } : {}),
   };
 }
 

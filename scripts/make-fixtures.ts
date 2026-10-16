@@ -8,6 +8,8 @@
  *   calibration-rev.pdf the same sheet revised: a new 60 x 30 pt box at (700, 500) and a new line (900,150)-(1000,150)
  *   set-200.pdf         200-page A1 set with page labels M-001…, bookmarks and planted search terms
  *   scanned.pdf         one page holding a single raster image and no text
+ *   scanned-text.pdf    a scanned A3 sheet (200 dpi greyscale image) of notes and a title block; no text layer
+ *   scanned-text.json   the words on it and where they are (PDF user space), for checking OCR
  *   annotated.pdf       existing annotations of several types, with unknown and vendor private keys
  *   form.pdf            AcroForm with a text field, a check box, a choice field and a radio group
  *
@@ -234,6 +236,41 @@ function makeScanned() {
   save(doc, "scanned.pdf");
 }
 
+function makeScannedText() {
+  // draw the sheet as vector text first, then rasterise it: the PDF holds only the image
+  const [pw, ph] = A3;
+  const lines: [number, number, number, string][] = [
+    [60, ph - 80, 26, "GENERAL NOTES"],
+    [60, ph - 130, 16, "1. ALL DIMENSIONS ARE IN MILLIMETRES"],
+    [60, ph - 160, 16, "2. DO NOT SCALE FROM THIS DRAWING"],
+    [60, ph - 190, 16, "3. CHECK LEVELS ON SITE BEFORE INSTALLATION"],
+    [60, ph - 220, 16, "4. DUCTWORK TO COMPLY WITH AS 4254"],
+    [pw - 420, 90, 20, "HOSPITAL STAGE 2"],
+    [pw - 420, 60, 16, "DRAWING M-042 REVISION C"],
+  ];
+  const src = new mupdf.PDFDocument();
+  const content = "0 g\n" + lines.map(([x, y, sz, t]) => text(x, y, sz, t)).join("") + "0 G 2 w 30 30 m " + f(pw - 30) + " 30 l " + f(pw - 30) + " " + f(ph - 30) + " l 30 " + f(ph - 30) + " l h S\n";
+  src.insertPage(-1, src.addPage([0, 0, pw, ph], 0, { Font: { F1: helvetica(src) } }, content));
+  const dpi = 200;
+  const pix = src.loadPage(0).toPixmap(mupdf.Matrix.scale(dpi / 72, dpi / 72), mupdf.ColorSpace.DeviceGray, false, true);
+  const px = pix.getPixels();
+  const r = rng(7);
+  for (let i = 0; i < px.length; i++) px[i] = Math.max(0, Math.min(255, px[i] - Math.floor(r() * 18)));
+  const doc = new mupdf.PDFDocument();
+  const img = doc.addImage(new mupdf.Image(pix));
+  doc.insertPage(-1, doc.addPage([0, 0, pw, ph], 0, { XObject: { Im1: img } }, `q ${f(pw)} 0 0 ${f(ph)} 0 0 cm /Im1 Do Q`));
+  save(doc, "scanned-text.pdf");
+  const words = lines.flatMap(([x, y, sz, t]) => {
+    let cx = x;
+    return t.split(" ").map((w) => {
+      const wx = cx;
+      cx += (w.length + 1) * sz * 0.6;
+      return { text: w, x: wx, y, size: sz };
+    });
+  });
+  writeFileSync(join(outDir, "scanned-text.json"), JSON.stringify({ dpi, lines: lines.map(([x, y, size, t]) => ({ x, y, size, text: t })), words }, null, 2));
+}
+
 function makeAnnotated() {
   const doc = new mupdf.PDFDocument();
   const res = { Font: { F1: helvetica(doc) } };
@@ -404,6 +441,7 @@ console.log(`dense-a1 paths: ${densePaths}`);
 makeCalibration();
 make200();
 makeScanned();
+makeScannedText();
 makeAnnotated();
 makeForm();
 makeSecured();

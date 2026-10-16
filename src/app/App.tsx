@@ -9,6 +9,7 @@ import { SecurityDialog, openSecurity } from "../features/security/SecurityDialo
 import { LinkDialog } from "../features/links/LinkDialog";
 import { goBack, goForward } from "../features/links/navigate";
 import { HeaderFooterDialog, openHeaderFooter } from "../features/headerFooter/HeaderFooterDialog";
+import { OcrDialog, openOcr } from "../features/ocr/OcrDialog";
 import { LabelRegionDialog, startLabelRegion } from "../features/pages/LabelRegionDialog";
 import { bookmarksFromLabels } from "../features/pages/labelRegion";
 import { OverlayDialog, openOverlayDialog } from "../features/overlay/OverlayDialog";
@@ -177,6 +178,8 @@ function MenuBar() {
         <Sep />
         <Item label="Overlay pages…" onSelect={openOverlayDialog} disabled={!has} />
         <Item label="Compare documents…" onSelect={openOverlayDialog} disabled={!has} />
+        <Sep />
+        <Item label="Recognise text (OCR)…" onSelect={() => void openOcr()} disabled={!has} />
         <Sep />
         <Item label={useApp.getState().tools.reuse ? "Turn reuse mode off" : "Turn reuse mode on"} shortcut="Ctrl+R" onSelect={() => useApp.setState((s) => ({ tools: { ...s.tools, reuse: !s.tools.reuse } }))} />
       </TopMenu>
@@ -379,6 +382,7 @@ export function App() {
       <OverlayDialog />
       <LabelRegionDialog />
       <HeaderFooterDialog />
+      <OcrDialog />
       <LinkDialog />
       <AskDialog />
       <SecurityDialog />

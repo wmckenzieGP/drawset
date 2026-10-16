@@ -1,6 +1,6 @@
 /** Opening, saving and closing documents: glue between the store, the engine and the host. */
 import { engine } from "../engine/client";
-import type { Decoration, DocInfo, SavePlan } from "../engine/types";
+import type { Decoration, DocInfo, OcrPage, SavePlan } from "../engine/types";
 import { askText } from "../app/AskDialog";
 import { dropJournal, sha256Hex } from "../features/recovery/journal";
 import { currentSpec, decorationsFor, specJson } from "../features/headerFooter/hf";
@@ -136,6 +136,13 @@ useApp.subscribe((s, prev) => {
   }
 });
 
+/** Page content changed in the engine: redraw it, and forget anything worked out from the old text. */
+function contentChanged(key: string, docId: string, pages: number[]) {
+  renderCache.refreshDoc(docId, new Set(pages));
+  forgetContentIndexes(docId);
+  updateTab(key, (x) => (x.search.query ? { ...x, search: { query: "", hits: [], current: -1, running: false, done: false } } : x));
+}
+
 /** Each physical page's decoration (as JSON) that the engine document currently holds, per document. */
 const appliedDecor = new Map<string, Map<number, string>>();
 
@@ -174,14 +181,37 @@ useApp.subscribe((s, prev) => {
     engine()
       .setDecorations(t.docId, pages, json)
       .then((changed) => {
-        if (changed.length) {
-          renderCache.refreshDoc(t.docId, new Set(changed));
-          forgetContentIndexes(t.docId);
-        }
+        if (changed.length) contentChanged(t.key, t.docId, changed);
       })
       .catch((e) => flash(`Could not update headers and footers: ${(e as Error).message}`, "error"));
   }
 });
+/** Each physical page's recognised-text layer that the engine document currently holds, per document. */
+const appliedOcr = new Map<string, Record<number, OcrPage | null>>();
+
+// the recognised-text layer follows the undoable state
+useApp.subscribe((s, prev) => {
+  for (const t of s.tabs) {
+    const before = prev.tabs.find((x) => x.key === t.key);
+    if (before && before.state === t.state) continue;
+    const applied = appliedOcr.get(t.docId) ?? {};
+    const want = t.state.ocr ?? {};
+    if (want === applied) continue;
+    const pages: Record<number, OcrPage | null> = {};
+    for (const src of new Set([...Object.keys(applied), ...Object.keys(want)].map(Number))) {
+      if ((want[src] ?? null) !== (applied[src] ?? null)) pages[src] = want[src] ?? null;
+    }
+    appliedOcr.set(t.docId, want);
+    if (!Object.keys(pages).length) continue;
+    engine()
+      .setOcrLayer(t.docId, pages)
+      .then((changed) => {
+        if (changed.length) contentChanged(t.key, t.docId, changed);
+      })
+      .catch((e) => flash(`Could not update the recognised text: ${(e as Error).message}`, "error"));
+  }
+});
+
 /** Builds the save plan: what changed since the last save. */
 export interface SaveOptions {
   flatten?: boolean;
@@ -236,7 +266,7 @@ export function rightsBlock(t: DocTab, plan: SavePlan): string | null {
   const p = sec.permissions;
   const pagesChanged = plan.pages.length !== t.info.pageCount || plan.pages.some((x, i) => x.index !== i || x.rotate !== t.info.pages[i].rotate || x.scale !== undefined);
   if (plan.security !== undefined) return "Changing passwords and permissions needs the permissions password.";
-  if (plan.flatten || plan.flattenForms || plan.applyRedactions || plan.pageLabels || plan.outline || pagesChanged || t.state.headerFooter !== undefined) {
+  if (plan.flatten || plan.flattenForms || plan.applyRedactions || plan.pageLabels || plan.outline || pagesChanged || t.state.headerFooter !== undefined || t.state.ocr !== undefined) {
     if (!p.edit || (pagesChanged && !p.assemble)) return "This file's permissions do not allow changing its pages or content.";
   }
   if ((plan.upserts.length || plan.deletes.length) && !p.annotate) return "This file's permissions do not allow adding or changing markups.";
@@ -283,6 +313,7 @@ export async function saveTab(key: string, opts: SaveOptions = {}): Promise<bool
     appliedFields.delete(t.docId);
     appliedDecor.delete(t.docId);
     appliedSpec.delete(t.docId);
+    appliedOcr.delete(t.docId);
     const fingerprint = await sha256Hex(res.bytes).catch(() => undefined);
     const path = await saveInPlace(t.path, t.name, res.bytes);
     const pages = pagesFromInfo(res.info);
@@ -352,6 +383,7 @@ export async function closeTab(key: string, force = false): Promise<boolean> {
   appliedFields.delete(t.docId);
   appliedDecor.delete(t.docId);
   appliedSpec.delete(t.docId);
+  appliedOcr.delete(t.docId);
   void dropJournal(t);
   await engine().close(t.docId);
   return true;

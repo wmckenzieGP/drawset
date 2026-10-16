@@ -1342,3 +1342,22 @@ input.small {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+.ocr-dialog {
+  width: min(480px, 94vw);
+}
+.ocr-scope {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0;
+}
+.ocr-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+}
+.ocr-progress progress {
+  width: 100%;
+}

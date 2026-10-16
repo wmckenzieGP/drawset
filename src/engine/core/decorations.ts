@@ -12,11 +12,67 @@ const FONT = "DrawsetHelv";
 const GS = "DrawsetWm";
 const n = (v: number) => String(Math.round(v * 1000) / 1000);
 
-function isOurs(o: mupdf.PDFObject): boolean {
+function isOurs(o: mupdf.PDFObject, role: string): boolean {
   const r = o.resolve();
   if (!r.isDictionary() && !r.isStream()) return false;
   const d = r.get("DrawsetData");
-  return d.isDictionary() && d.get("Role").isName() && d.get("Role").asName() === "HeaderFooter";
+  return d.isDictionary() && d.get("Role").isName() && d.get("Role").asName() === role;
+}
+
+function contentList(obj: mupdf.PDFObject): mupdf.PDFObject[] {
+  const contents = obj.get("Contents");
+  const list: mupdf.PDFObject[] = [];
+  if (contents.isArray()) for (let i = 0; i < contents.length; i++) list.push(contents.get(i));
+  else if (!contents.isNull()) list.push(contents);
+  return list;
+}
+
+/** Drawset's own content streams with role `role` on a page, in order (the opening "q" stream first). */
+export function ownStreams(obj: mupdf.PDFObject, role: string): mupdf.PDFObject[] {
+  return contentList(obj).filter((c) => isOurs(c, role));
+}
+
+/**
+ * Replaces Drawset's own content streams with role `role` on a page: `body` gives new content (null removes
+ * them), or an array puts back streams taken earlier with ownStreams. The page's own streams are left as they
+ * are; ours are wrapped so its graphics state cannot leak into them. Returns whether the page changed.
+ */
+export function replaceOwnStreams(doc: mupdf.PDFDocument, obj: mupdf.PDFObject, role: string, body: string | null | mupdf.PDFObject[]): boolean {
+  const list = contentList(obj);
+  const own = list.filter((c) => !isOurs(c, role));
+  let pre: mupdf.PDFObject[] = [];
+  let post: mupdf.PDFObject[] = [];
+  if (Array.isArray(body)) {
+    pre = body.slice(0, 1);
+    post = body.slice(1);
+  } else if (body !== null) {
+    const tag = { DrawsetData: { Role: doc.newName(role) } };
+    pre = [doc.addStream("q\n", tag)];
+    post = [doc.addStream(`Q\n${body}`, tag)];
+  }
+  if (own.length === list.length && !pre.length) return false;
+  const arr = doc.newArray();
+  for (const c of [...pre, ...own, ...post]) arr.push(c);
+  if (arr.length === 1) obj.put("Contents", arr.get(0));
+  else obj.put("Contents", arr);
+  return true;
+}
+
+/** The page's own resource dictionary (an inherited one is copied onto the page first). */
+export function ownResources(doc: mupdf.PDFDocument, obj: mupdf.PDFObject, kind: "Font" | "ExtGState"): mupdf.PDFObject {
+  let res = obj.get("Resources");
+  if (!res.isDictionary()) {
+    const inherited = obj.getInheritable("Resources");
+    res = doc.newDictionary();
+    if (inherited.isDictionary()) inherited.forEach((v, k) => res.put(k, v));
+    obj.put("Resources", res);
+  }
+  let sub = res.get(kind);
+  if (!sub.isDictionary()) {
+    sub = doc.newDictionary();
+    res.put(kind, sub);
+  }
+  return sub;
 }
 
 /** Page-space transform for the page shown with rotation `rotate` (MuPDF's page.getTransform for that rotation). */
@@ -96,58 +152,21 @@ export function setDecorations(doc: mupdf.PDFDocument, pages: Record<number, Dec
     if (index < 0 || index >= doc.countPages()) continue;
     const page = doc.loadPage(index) as mupdf.PDFPage;
     const obj = page.getObject();
-    const contents = obj.get("Contents");
-    const list: mupdf.PDFObject[] = [];
-    if (contents.isArray()) for (let i = 0; i < contents.length; i++) list.push(contents.get(i));
-    else if (!contents.isNull()) list.push(contents);
-    const own = list.filter((c) => !isOurs(c));
-    if (own.length === list.length && !dec) continue;
-    changed.push(index);
     if (!dec) {
-      if (own.length === 1) obj.put("Contents", own[0]);
-      else {
-        const arr = doc.newArray();
-        for (const c of own) arr.push(c);
-        obj.put("Contents", arr);
-      }
+      if (replaceOwnStreams(doc, obj, "HeaderFooter", null)) changed.push(index);
       continue;
     }
     const { ctm, width, height } = pageMatrix(page, dec.rotate);
     const m = invert(ctm);
-    const role = { DrawsetData: { Role: doc.newName("HeaderFooter") } };
-    const pre = doc.addStream("q\n", role);
-    const body = `Q\nq ${m.map(n).join(" ")} cm\n${decorationContent(dec, width, height)}\nQ\n`;
-    const post = doc.addStream(body, role);
-    const arr = doc.newArray();
-    arr.push(pre);
-    for (const c of own) arr.push(c);
-    arr.push(post);
-    obj.put("Contents", arr);
-    // resources: our font and opacity, added to the page's own (or inherited) dictionary
-    let res = obj.get("Resources");
-    if (!res.isDictionary()) {
-      const inherited = obj.getInheritable("Resources");
-      res = doc.newDictionary();
-      if (inherited.isDictionary()) inherited.forEach((v, k) => res.put(k, v));
-      obj.put("Resources", res);
-    }
+    replaceOwnStreams(doc, obj, "HeaderFooter", `q ${m.map(n).join(" ")} cm\n${decorationContent(dec, width, height)}\nQ\n`);
+    changed.push(index);
     if (!font) font = doc.addObject({ Type: "Font", Subtype: "Type1", BaseFont: "Helvetica", Encoding: "WinAnsiEncoding" });
-    let fonts = res.get("Font");
-    if (!fonts.isDictionary()) {
-      fonts = doc.newDictionary();
-      res.put("Font", fonts);
-    }
-    fonts.put(FONT, font);
+    ownResources(doc, obj, "Font").put(FONT, font);
     if (dec.watermark?.text) {
       const ca = Math.round(dec.watermark.opacity * 1000) / 1000;
       let gs = gsFor.get(ca);
       if (!gs) gsFor.set(ca, (gs = doc.addObject({ Type: "ExtGState", ca, CA: ca })));
-      let ext = res.get("ExtGState");
-      if (!ext.isDictionary()) {
-        ext = doc.newDictionary();
-        res.put("ExtGState", ext);
-      }
-      ext.put(GS, gs);
+      ownResources(doc, obj, "ExtGState").put(GS, gs);
     }
   }
   const root = doc.getTrailer().get("Root");

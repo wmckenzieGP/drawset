@@ -5,13 +5,14 @@
 import * as mupdf from "mupdf";
 import { concat, displayMatrix, type Matrix, type Pt, type Quad, type Rect, scaleM, transformRect, translateM } from "../../markup/geometry";
 import type { Markup } from "../../markup/model";
-import type { Decoration, DocInfo, FormField, ImagePdfPage, SnapGeometry, MarkupRecord, OutlineNode, PageInfo, RenderRequest, SavePlan, SearchHit } from "../types";
+import type { Decoration, DocInfo, FormField, OcrImage, OcrPage, ImagePdfPage, SnapGeometry, MarkupRecord, OutlineNode, PageInfo, RenderRequest, SavePlan, SearchHit } from "../types";
 import { readPageMarkups } from "./annotRead";
 import { deleteAnnotationTree, ensurePopup, invertCtm, PRIVATE_KEY, subtypeFor, writeLink, writeMarkup, writeReplies, writeStatus, type WriteContext } from "./annotWrite";
 import { buildImagePdf } from "./imagePdf";
 import { collectSnapGeometry } from "./snapGeometry";
 import { readFields, setFieldValues } from "./forms";
 import { readDecorationSpec, setDecorations } from "./decorations";
+import { renderForOcr, setOcrLayer } from "./ocr";
 import { NEEDS_PASSWORD, readSecurity, securityOptions, WRONG_PASSWORD } from "./security";
 import { textInRect, writeOutline, writePageLabels } from "./labels";
 import { safePageScale, writePageScale } from "./measureDict";
@@ -58,6 +59,8 @@ interface OpenDoc {
   lists: Lru<number, mupdf.DisplayList>;
   annotLists: Lru<number, mupdf.DisplayList>;
   stext: Lru<number, mupdf.StructuredText>;
+  /** Each page's recognised-text streams as opened, kept when the layer is first replaced (to undo it). */
+  ocrOriginals: Map<number, mupdf.PDFObject[]>;
 }
 
 let nextDoc = 1;
@@ -162,7 +165,7 @@ export class EngineCore {
     const id = docId ?? `doc${nextDoc++}`;
     const prev = this.docs.get(id);
     if (prev) this.dropCaches(prev);
-    this.docs.set(id, { doc, name, password, openPassword, owner, lists: new Lru(6), annotLists: new Lru(4), stext: new Lru(12) });
+    this.docs.set(id, { doc, name, password, openPassword, owner, lists: new Lru(6), annotLists: new Lru(4), stext: new Lru(12), ocrOriginals: new Map() });
     return this.info(id);
   }
 
@@ -467,6 +470,22 @@ export class EngineCore {
   setDecorations(docId: string, pages: Record<number, Decoration | null>, spec: string | null): number[] {
     const d = this.get(docId);
     const changed = setDecorations(d.doc, pages, spec);
+    if (changed.length) this.dropCaches(d);
+    return changed;
+  }
+
+  ocrImage(docId: string, pageIndex: number, dpi: number, maxPx: number): OcrImage {
+    return renderForOcr(this.get(docId).doc.loadPage(pageIndex) as mupdf.PDFPage, dpi, maxPx);
+  }
+
+  textCounts(docId: string, pages: number[]): number[] {
+    const d = this.get(docId);
+    return pages.map((i) => this.stextFor(d, i).asText().replace(/\s+/g, "").length);
+  }
+
+  setOcrLayer(docId: string, pages: Record<number, OcrPage | null>): number[] {
+    const d = this.get(docId);
+    const changed = setOcrLayer(d.doc, pages, d.ocrOriginals);
     if (changed.length) this.dropCaches(d);
     return changed;
   }

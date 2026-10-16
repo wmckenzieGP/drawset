@@ -1,5 +1,5 @@
 /** Main-thread proxy for the engine worker. All PDF work happens off the UI thread. */
-import type { Bitmap, DocInfo, MarkupRecord, PageInfo, PdfEngine, RenderRequest, SavePlan, SaveResult, SearchHit, ImagePdfPage, SnapGeometry, FormField, Decoration } from "./types";
+import type { Bitmap, DocInfo, MarkupRecord, PageInfo, PdfEngine, RenderRequest, SavePlan, SaveResult, SearchHit, ImagePdfPage, SnapGeometry, FormField, Decoration, OcrImage, OcrPage } from "./types";
 import type { Pt, Quad, Rect } from "../markup/geometry";
 
 interface Pending {
@@ -81,6 +81,15 @@ export class WorkerEngine implements PdfEngine {
   }
   setDecorations(docId: string, pages: Record<number, Decoration | null>, spec: string | null) {
     return this.call<number[]>("setDecorations", [docId, pages, spec]);
+  }
+  ocrImage(docId: string, page: number, dpi: number, maxPx: number) {
+    return this.call<OcrImage>("ocrImage", [docId, page, dpi, maxPx]);
+  }
+  textCounts(docId: string, pages: number[]) {
+    return this.call<number[]>("textCounts", [docId, pages]);
+  }
+  setOcrLayer(docId: string, pages: Record<number, OcrPage | null>) {
+    return this.call<number[]>("setOcrLayer", [docId, pages]);
   }
   formFields(docId: string) {
     return this.call<FormField[]>("formFields", [docId]);

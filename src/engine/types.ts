@@ -192,6 +192,27 @@ export interface ImagePdfPage {
   caption: string[];
 }
 
+/** A page rendered for recognition: a greyscale PNG and the matrix from its pixels to PDF user space. */
+export interface OcrImage {
+  png: Uint8Array;
+  width: number;
+  height: number;
+  matrix: Matrix;
+}
+
+/** One recognised word, in image pixels (y down). */
+export interface OcrWord {
+  text: string;
+  bbox: Rect;
+  baseline: number;
+}
+
+/** A page's recognised text: words in image pixels, and the matrix from those pixels to PDF user space. */
+export interface OcrPage {
+  matrix: Matrix;
+  words: OcrWord[];
+}
+
 export interface PdfEngine {
   open(bytes: Uint8Array, name: string, password?: string, keepBytes?: boolean): Promise<DocInfo>;
   close(docId: string): Promise<void>;
@@ -211,6 +232,12 @@ export interface PdfEngine {
   saveCopy(docId: string, plan: SavePlan): Promise<Uint8Array>;
   /** Replaces Drawset's headers, footers and watermark on pages (physical index; null removes); returns pages changed. */
   setDecorations(docId: string, pages: Record<number, Decoration | null>, spec: string | null): Promise<number[]>;
+  /** A page's content (no markups) as a greyscale image for text recognition. */
+  ocrImage(docId: string, page: number, dpi: number, maxPx: number): Promise<OcrImage>;
+  /** How many characters of text each page already has. */
+  textCounts(docId: string, pages: number[]): Promise<number[]>;
+  /** Replaces the invisible recognised-text layer on pages (physical index; null restores the page as opened); returns pages changed. */
+  setOcrLayer(docId: string, pages: Record<number, OcrPage | null>): Promise<number[]>;
   /** Gives full rights with the permissions password; throws WRONG_PASSWORD. */
   unlock(docId: string, password: string): Promise<DocInfo>;
   /** The document's form fields. */
