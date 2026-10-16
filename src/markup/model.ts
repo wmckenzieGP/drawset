@@ -66,6 +66,8 @@ export interface MarkupStyle {
 
 export interface Reply {
   id: string;
+  /** Id of the reply this one answers; absent when it answers the markup itself. */
+  inReplyTo?: string;
   author: string;
   contents: string;
   created: string;

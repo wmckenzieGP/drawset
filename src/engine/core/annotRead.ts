@@ -149,13 +149,16 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
     entries.push({ num: ref.isIndirect() ? ref.asIndirect() : 0, obj, subtype });
   }
 
-  // statuses and replies hang off their parent via /IRT
+  // statuses and replies hang off their parent via /IRT; replies to replies form a thread under the first markup
   const statusOf = new Map<number, { state: ReviewStatus; when: string }>();
-  const repliesOf = new Map<number, Reply[]>();
+  const replyParent = new Map<number, number>();
+  const replyByNum = new Map<number, Reply>();
   const childNums = new Set<number>();
   for (const e of entries) {
     const irt = e.obj.get("IRT");
     if (!irt.isIndirect()) continue;
+    // /RT /Group annotations are grouped with their parent, not replies: they stay markups of their own
+    if (name(e.obj.get("RT")) === "Group") continue;
     const parent = irt.asIndirect();
     childNums.add(e.num);
     const model = name(e.obj.get("StateModel"));
@@ -166,8 +169,8 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
       const prev = statusOf.get(parent);
       if (!prev || when >= prev.when) statusOf.set(parent, { state, when });
     } else if (model === "") {
-      const list = repliesOf.get(parent) ?? [];
-      list.push({
+      replyParent.set(e.num, parent);
+      replyByNum.set(e.num, {
         id: str(e.obj.get("NM")) || `obj-${e.num}`,
         author: str(e.obj.get("T")),
         contents: str(e.obj.get("Contents")),
@@ -175,8 +178,23 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
         modified: when,
         objNum: e.num,
       });
-      repliesOf.set(parent, list);
     }
+  }
+  const repliesOf = new Map<number, Reply[]>();
+  for (const [num, reply] of replyByNum) {
+    let parent = replyParent.get(num)!;
+    const direct = replyByNum.get(parent);
+    if (direct) reply.inReplyTo = direct.id;
+    // walk up to the markup the thread belongs to (guarding against /IRT cycles)
+    const seen = new Set<number>([num]);
+    while (replyByNum.has(parent) && !seen.has(parent)) {
+      seen.add(parent);
+      parent = replyParent.get(parent)!;
+    }
+    if (replyByNum.has(parent)) continue;
+    const list = repliesOf.get(parent) ?? [];
+    list.push(reply);
+    repliesOf.set(parent, list);
   }
 
   const out: MarkupRecord[] = [];

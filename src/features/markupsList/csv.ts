@@ -1,4 +1,5 @@
 /** Markups List rows and CSV export (pure, unit-tested). */
+import { threadOrder } from "../replies/thread";
 import { colourHex, formatDate, KIND_LABELS, type Markup } from "../../markup/model";
 import { isMeasure, measureValue, scaleLabel } from "../../markup/measure";
 import type { PageEntry } from "../../state/store";
@@ -22,6 +23,9 @@ export interface Row {
   /** Full-precision value and its unit (measurements only). */
   value: number | null;
   unit: string;
+  /** Number of replies, and their text for filtering and export ("Author (date): text" per line). */
+  replyCount: number;
+  replies: string;
   m: Markup;
 }
 
@@ -45,19 +49,23 @@ export function markupRows(markups: Record<string, Markup>, pages: PageEntry[]):
       colour: colourHex(m.kind === "textbox" ? m.style.textColor : m.style.color),
       locked: m.locked,
       ...(isMeasure(m.kind) ? (({ text, value, unit }) => ({ measurement: text, value, unit }))(measureValue(m)) : { measurement: "", value: null, unit: "" }),
+      replyCount: m.replies.length,
+      replies: threadOrder(m.replies)
+        .map(({ reply: r, depth }) => `${"> ".repeat(depth)}${r.author} (${formatDate(r.created)}): ${r.contents}`)
+        .join("\n"),
       m,
     });
   }
   return rows;
 }
 
-export type SortKey = "page" | "type" | "subject" | "author" | "date" | "status" | "comment" | "colour" | "measurement";
+export type SortKey = "page" | "type" | "subject" | "author" | "date" | "status" | "comment" | "colour" | "measurement" | "replies";
 
 /** Sorts names the way people expect (accents and case don't push entries to the end). */
 const collator = new Intl.Collator("en-AU", { sensitivity: "base", numeric: true });
 
 export function sortRows(rows: Row[], key: SortKey, dir: 1 | -1): Row[] {
-  const val = (r: Row): string | number => (key === "page" ? r.pageIndex : key === "measurement" ? (r.value ?? -Infinity) : key === "date" ? r.modified : (r[key] as string));
+  const val = (r: Row): string | number => (key === "page" ? r.pageIndex : key === "measurement" ? (r.value ?? -Infinity) : key === "replies" ? r.replyCount : key === "date" ? r.modified : (r[key] as string));
   return rows.slice().sort((a, b) => {
     const va = val(a);
     const vb = val(b);
@@ -77,11 +85,11 @@ function cell(v: string | number | boolean): string {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-export const CSV_COLUMNS = ["Page", "Page number", "Type", "Subject", "Author", "Date", "Status", "Comment", "Colour", "Locked", "Measurement", "ID"];
+export const CSV_COLUMNS = ["Page", "Page number", "Type", "Subject", "Author", "Date", "Status", "Comment", "Colour", "Locked", "Measurement", "ID", "Replies"];
 
 export function rowsToCsv(rows: Row[]): string {
   const lines = [CSV_COLUMNS.join(",")];
-  for (const r of rows) lines.push([r.page, r.pageIndex + 1, r.type, r.subject, r.author, r.date, r.status, r.comment, r.colour, r.locked ? "Yes" : "No", r.measurement, r.id].map(cell).join(","));
+  for (const r of rows) lines.push([r.page, r.pageIndex + 1, r.type, r.subject, r.author, r.date, r.status, r.comment, r.colour, r.locked ? "Yes" : "No", r.measurement, r.id, r.replies].map(cell).join(","));
   return "\uFEFF" + lines.join("\r\n") + "\r\n";
 }
 

@@ -2,7 +2,7 @@
 
 **Current item:** T1.18 Tier 1 release (waiting on S3 for the Windows build)
 **Last finished:** T1.17 print
-**Next up:** T2.7 replies (Tier 2 continues while S3 is blocked)
+**Next up:** T2.8 snapping (Tier 2 continues while S3 is blocked)
 
 ## How to install
 Download `Drawset-Setup-<version>.exe` from the latest GitHub Release (https://github.com/wmckenziegp/drawset/releases) and run it. Windows SmartScreen may warn because the installer is not code-signed: choose "More info" then "Run anyway".
@@ -30,3 +30,4 @@ Download `Drawset-Setup-<version>.exe` from the latest GitHub Release (https://g
 - T2.4: Erase and Redact tools (drag an area) and "Mark all for redaction" on search results create pending /Redact annotations that can be saved, reviewed and removed. "Review and apply redactions" applies them all with MuPDF (text removed, image pixels cleared, line art wholly inside removed; black box for redactions, blank for erase) and saves in full, never incrementally. Unit and e2e tests check the text is absent from MuPDF and pdf.js extraction while neighbouring text stays.
 - T2.5: Tools > Overlay pages… compares any two pages from any open files: shared ink black, red-only and blue-only in colour, with show/hide toggles and two-point alignment (scale, rotation and shift). Unit test: identical pages give zero colour, different pages give both colours, the alignment maps both point pairs exactly. Export writes an image-only PDF with a caption saying it is image-based; checked in MuPDF and pdf.js (text, image XObject, render).
 - T2.6: Tool Chest panel (left panel, and Edit > Add to Tool Chest). Tools draw with their saved properties or place an exact copy (switchable per tool); sets, recents, rename/delete, JSON export and import; kept in the app's local storage. Unit test: for all 20 drawable kinds, a tool taken through JSON export and import places a markup whose properties equal the original's, in memory and after writing and reading both from a PDF. E2E covers draw, copy, export, import and persistence after reload.
+- T2.7: Reply threads in the Properties panel (reply to a markup or to a reply, edit, delete; each an undo step) and in the Markups List (Replies column, expandable reply rows, Show replies, filter matches reply text, CSV Replies column). Written as /Text with /IRT and /RT /R, an empty appearance, and updated in place on incremental save. Tests: thread written and read back with its shape, pdf.js sees the same /IRT chain, page renders unchanged in MuPDF and pdf.js, edit/delete keep the rest; nested replies from other editors without /NM read correctly; /RT /Group is not a reply.

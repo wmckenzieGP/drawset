@@ -457,6 +457,77 @@ export function writeStatus(ctx: WriteContext, parentObj: mupdf.PDFObject, m: Ma
   pageObj.get("Annots").push(reply);
 }
 
+/**
+ * Brings the markup's reply thread in the file in line with `m.replies`: new replies are added as /Text
+ * annotations with /IRT (the markup or the reply they answer) and /RT /R, changed text is updated, and replies
+ * that were removed are deleted. Replies have an empty appearance, so viewers list them without drawing an icon.
+ */
+export function writeReplies(ctx: WriteContext, parentObj: mupdf.PDFObject, m: Markup) {
+  const { doc, page } = ctx;
+  const pageObj = page.getObject();
+  const parentNum = parentObj.asIndirect();
+  const isReply = (a: mupdf.PDFObject) => !a.get("StateModel").isName() && !a.get("State").isName() && !(a.get("RT").isName() && a.get("RT").asName() === "Group");
+  const thread = new Map<number, mupdf.PDFObject>();
+  const members = new Set<number>([parentNum]);
+  const annots = pageObj.get("Annots");
+  for (let grew = annots.isArray(); grew; ) {
+    grew = false;
+    for (let i = 0; i < annots.length; i++) {
+      const a = annots.get(i);
+      if (!a.isIndirect() || members.has(a.asIndirect())) continue;
+      const irt = a.get("IRT");
+      if (irt.isIndirect() && members.has(irt.asIndirect()) && isReply(a)) {
+        thread.set(a.asIndirect(), a);
+        members.add(a.asIndirect());
+        grew = true;
+      }
+    }
+  }
+  const keep = new Set(m.replies.map((r) => r.objNum).filter((n): n is number => n !== undefined));
+  for (const num of thread.keys()) if (!keep.has(num)) deleteAnnotationTree(doc, page, num);
+
+  const byId = new Map<string, mupdf.PDFObject>();
+  const rect = parentObj.get("Rect");
+  const r = rect.isArray() && rect.length === 4 ? [0, 1, 2, 3].map((i) => rect.get(i).asNumber()) : [0, 0, 20, 20];
+  // parents before the replies that answer them
+  const ordered = [...m.replies].sort((a, b) => a.created.localeCompare(b.created));
+  for (const reply of ordered) {
+    const irt = (reply.inReplyTo && byId.get(reply.inReplyTo)) || parentObj;
+    let obj = reply.objNum !== undefined ? thread.get(reply.objNum) : undefined;
+    if (obj) {
+      const same = (k: string, v: string) => obj!.get(k).isString() && obj!.get(k).asString() === v;
+      if (!same("Contents", reply.contents) || !same("T", reply.author)) {
+        obj.put("Contents", doc.newString(reply.contents));
+        obj.put("T", doc.newString(reply.author));
+        obj.put("M", doc.newString(pdfDate(reply.modified)));
+      }
+    } else {
+      const ap = doc.addStream("", { Type: doc.newName("XObject"), Subtype: doc.newName("Form"), BBox: [0, 0, 0, 0] });
+      obj = doc.addObject({
+        Type: doc.newName("Annot"),
+        Subtype: doc.newName("Text"),
+        Rect: [r[0], r[3] - 20, r[0] + 20, r[3]],
+        IRT: irt,
+        RT: doc.newName("R"),
+        T: doc.newString(reply.author),
+        Subj: doc.newString("Reply"),
+        Contents: doc.newString(reply.contents),
+        NM: doc.newString(reply.id),
+        CreationDate: doc.newString(pdfDate(reply.created)),
+        M: doc.newString(pdfDate(reply.modified)),
+        F: FLAG_PRINT | FLAG_NO_ZOOM | FLAG_NO_ROTATE,
+        Name: doc.newName("Comment"),
+        Open: false,
+        AP: { N: ap },
+        P: pageObj,
+      });
+      if (!pageObj.get("Annots").isArray()) pageObj.put("Annots", doc.newArray());
+      pageObj.get("Annots").push(obj);
+    }
+    byId.set(reply.id, obj);
+  }
+}
+
 /** Creates a /Popup for a note if it has none (Acrobat and other editors expect one). */
 export function ensurePopup(ctx: WriteContext, noteObj: mupdf.PDFObject, m: Markup) {
   const { doc, page } = ctx;

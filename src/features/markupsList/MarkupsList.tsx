@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { markupBounds } from "../../markup/appearance";
-import { KIND_LABELS, STATUSES, type ReviewStatus } from "../../markup/model";
+import { formatDate, KIND_LABELS, STATUSES, type Reply, type ReviewStatus } from "../../markup/model";
 import { scrollToPage, updateTab, useApp, type DocTab } from "../../state/store";
 import { saveAs } from "../../platform/host";
 import { cmd } from "../../app/commands";
-import { markupRows, quantitiesCsv, rowsToCsv, sortRows, type SortKey } from "./csv";
+import { markupRows, quantitiesCsv, rowsToCsv, sortRows, type Row, type SortKey } from "./csv";
+import { threadOrder } from "../replies/thread";
 import { formatTotal, totalsByType } from "../measure/MeasurePanel";
 
 const ROW_H = 26;
@@ -17,8 +18,11 @@ const COLS: { key: SortKey; label: string; w: number }[] = [
   { key: "status", label: "Status", w: 90 },
   { key: "colour", label: "Colour", w: 80 },
   { key: "measurement", label: "Measurement", w: 120 },
+  { key: "replies", label: "Replies", w: 80 },
   { key: "comment", label: "Comment", w: 320 },
 ];
+
+type Line = { t: "markup"; row: Row; index: number } | { t: "reply"; row: Row; reply: Reply; depth: number };
 
 export function MarkupsList({ tab }: { tab: DocTab }) {
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "page", dir: 1 });
@@ -39,10 +43,29 @@ export function MarkupsList({ tab }: { tab: DocTab }) {
       (r) =>
         (!typeFilter || r.type === typeFilter) &&
         (!statusFilter || r.status === statusFilter) &&
-        (!f || [r.page, r.type, r.subject, r.author, r.comment, r.status, r.date].some((v) => v.toLowerCase().includes(f))),
+        (!f || [r.page, r.type, r.subject, r.author, r.comment, r.status, r.date, r.replies].some((v) => v.toLowerCase().includes(f))),
     );
     return sortRows(filtered, sort.key, sort.dir);
   }, [allRows, filter, typeFilter, statusFilter, sort]);
+
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [allReplies, setAllReplies] = useState(false);
+  // markup rows with their reply rows under them when expanded (fixed height, so the list stays virtualised)
+  const lines = useMemo(() => {
+    const out: Line[] = [];
+    rows.forEach((row, index) => {
+      out.push({ t: "markup", row, index });
+      if (row.replyCount && (allReplies || expanded.has(row.id))) for (const { reply, depth } of threadOrder(row.m.replies)) out.push({ t: "reply", row, reply, depth });
+    });
+    return out;
+  }, [rows, expanded, allReplies]);
+  const toggle = (id: string) =>
+    setExpanded((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
 
   useEffect(() => {
     const el = bodyRef.current;
@@ -54,10 +77,9 @@ export function MarkupsList({ tab }: { tab: DocTab }) {
 
   const selected = new Set(tab.selection);
   const first = Math.max(0, Math.floor(scroll / ROW_H) - 5);
-  const last = Math.min(rows.length - 1, Math.ceil((scroll + viewH) / ROW_H) + 5);
+  const last = Math.min(lines.length - 1, Math.ceil((scroll + viewH) / ROW_H) + 5);
 
-  const clickRow = (i: number, e: React.MouseEvent) => {
-    const r = rows[i];
+  const clickRow = (r: Row, e: React.MouseEvent, i = rows.indexOf(r)) => {
     let sel: string[];
     if (e.shiftKey && anchor.current !== null) {
       const [a, b] = [Math.min(anchor.current, i), Math.max(anchor.current, i)];
@@ -120,6 +142,9 @@ export function MarkupsList({ tab }: { tab: DocTab }) {
             <option key={s}>{s}</option>
           ))}
         </select>
+        <label className="check small">
+          <input type="checkbox" checked={allReplies} onChange={(e) => setAllReplies(e.target.checked)} data-testid="ml-show-replies" /> Show replies
+        </label>
         <span className="spacer" />
         <select value="" disabled={!selCount} onChange={(e) => e.target.value && cmd.setStatus(tab.selection, e.target.value as ReviewStatus)} aria-label="Set status of selected markups" data-testid="ml-bulk-status">
           <option value="">Set status ({selCount})</option>
@@ -148,11 +173,32 @@ export function MarkupsList({ tab }: { tab: DocTab }) {
         ))}
       </div>
       <div className="ml-body" ref={bodyRef} onScroll={(e) => setScroll((e.target as HTMLElement).scrollTop)} data-testid="ml-body">
-        <div style={{ height: rows.length * ROW_H, position: "relative" }}>
-          {rows.slice(first, last + 1).map((r, k) => {
-            const i = first + k;
+        <div style={{ height: lines.length * ROW_H, position: "relative" }}>
+          {lines.slice(first, last + 1).map((line, k) => {
+            const top = (first + k) * ROW_H;
+            const grid = COLS.map((c) => `${c.w}px`).join(" ");
+            const r = line.row;
+            if (line.t === "reply") {
+              const p = line.reply;
+              return (
+                <div key={`${r.id}/${p.id}`} className="ml-row reply-row" style={{ top, height: ROW_H, gridTemplateColumns: grid }} onClick={(e) => clickRow(line.row, e)} data-testid="ml-reply-row">
+                  <span />
+                  <span className="muted">Reply</span>
+                  <span />
+                  <span>{p.author}</span>
+                  <span>{formatDate(p.created)}</span>
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <span title={p.contents} style={{ paddingLeft: 8 + line.depth * 14 }}>
+                    ↳ {p.contents}
+                  </span>
+                </div>
+              );
+            }
             return (
-              <div key={r.id} className={`ml-row ${selected.has(r.id) ? "selected" : ""}`} style={{ top: i * ROW_H, height: ROW_H, gridTemplateColumns: COLS.map((c) => `${c.w}px`).join(" ") }} onClick={(e) => clickRow(i, e)} data-testid="ml-row">
+              <div key={r.id} className={`ml-row ${selected.has(r.id) ? "selected" : ""}`} style={{ top, height: ROW_H, gridTemplateColumns: grid }} onClick={(e) => clickRow(line.row, e, line.index)} data-testid="ml-row">
                 <span>{r.page}</span>
                 <span>{r.type}</span>
                 <span>{r.subject}</span>
@@ -163,6 +209,21 @@ export function MarkupsList({ tab }: { tab: DocTab }) {
                   {r.colour && <i className="swatch" style={{ background: r.colour }} />} {r.colour}
                 </span>
                 <span className="num">{r.measurement}</span>
+                <span>
+                  {r.replyCount > 0 && (
+                    <button
+                      className="link"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggle(r.id);
+                      }}
+                      aria-expanded={allReplies || expanded.has(r.id)}
+                      data-testid="ml-replies-toggle"
+                    >
+                      {allReplies || expanded.has(r.id) ? "▾" : "▸"} {r.replyCount}
+                    </button>
+                  )}
+                </span>
                 <span title={r.comment}>{r.comment}</span>
               </div>
             );

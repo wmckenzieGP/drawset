@@ -626,7 +626,35 @@ button.link {
   padding: 4px 12px;
 }
 .replies {
-  padding: 0 12px;
+  padding: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.replies textarea {
+  width: 100%;
+  resize: vertical;
+}
+.replies > .btn {
+  align-self: flex-end;
+}
+.reply-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+}
+.reply-actions {
+  display: flex;
+  gap: 6px;
+  opacity: 0.6;
+}
+.reply:hover .reply-actions {
+  opacity: 1;
+}
+.reply-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .reply {
   border-left: 2px solid var(--line);
@@ -665,7 +693,7 @@ button.link {
 .ml-head,
 .ml-row {
   display: grid;
-  min-width: 1040px;
+  min-width: 1120px;
 }
 .ml-head {
   border-bottom: 1px solid var(--line);
@@ -696,6 +724,13 @@ button.link {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.ml-row.reply-row {
+  background: rgba(39, 51, 64, 0.35);
+  font-size: 12px;
+}
+.ml-row button.link {
+  padding: 0;
 }
 .ml-row:hover {
   background: var(--bg-3);

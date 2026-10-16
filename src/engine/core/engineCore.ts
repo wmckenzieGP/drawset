@@ -7,7 +7,7 @@ import { concat, displayMatrix, type Matrix, type Pt, type Quad, type Rect, scal
 import type { Markup } from "../../markup/model";
 import type { DocInfo, ImagePdfPage, MarkupRecord, OutlineNode, PageInfo, RenderRequest, SavePlan, SearchHit } from "../types";
 import { readPageMarkups } from "./annotRead";
-import { deleteAnnotationTree, ensurePopup, invertCtm, PRIVATE_KEY, subtypeFor, writeMarkup, writeStatus, type WriteContext } from "./annotWrite";
+import { deleteAnnotationTree, ensurePopup, invertCtm, PRIVATE_KEY, subtypeFor, writeMarkup, writeReplies, writeStatus, type WriteContext } from "./annotWrite";
 import { buildImagePdf } from "./imagePdf";
 import { safePageScale, writePageScale } from "./measureDict";
 
@@ -360,6 +360,7 @@ export class EngineCore {
         const obj = annot.getObject();
         if (markup.kind === "note") ensurePopup(ctx, obj, markup);
         if (markup.kind !== "foreign") writeStatus(ctx, obj, markup);
+        writeReplies(ctx, obj, markup);
       }
     }
     if (plan.applyRedactions) EngineCore.applyRedactions(doc);

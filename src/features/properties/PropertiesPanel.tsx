@@ -1,3 +1,4 @@
+import { ReplyThread } from "../replies/ReplyThread";
 import { useEffect, useState } from "react";
 import { colourHex, FONT_FAMILIES, formatDate, hexColour, KIND_LABELS, LINE_ENDS, nowIso, STATUSES, type Markup, type MarkupKind, type MarkupStyle, type ReviewStatus } from "../../markup/model";
 import { textBoxHeight, textPadding } from "../../markup/appearance";
@@ -208,24 +209,12 @@ export function PropertiesPanel({ tab }: { tab: DocTab }) {
         <label className="check prop-row">
           <input type="checkbox" checked={selected.every((m) => m.locked)} onChange={(e) => cmd.setLocked(e.target.checked)} data-testid="prop-locked" /> Locked
         </label>
-        {first.replies.length > 0 && selected.length === 1 && (
-          <div className="replies">
-            <div className="panel-subtitle">Replies</div>
-            {first.replies.map((r) => (
-              <div key={r.id} className="reply">
-                <div className="muted">
-                  {r.author} · {formatDate(r.created)}
-                </div>
-                <div>{r.contents}</div>
-              </div>
-            ))}
-          </div>
-        )}
+        {selected.length === 1 && <ReplyThread tabKey={tab.key} markup={first} />}
       </div>
     );
   }
 
-  const isDrawTool = !["select", "pan", "zoom", "text"].includes(tool);
+  const isDrawTool = tool in KIND_LABELS && tool !== "foreign";
   if (isDrawTool) {
     const kind = tool as MarkupKind;
     const style = defaults[kind] ?? defaultStyleFor(kind);
