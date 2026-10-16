@@ -42,8 +42,12 @@ export class WorkerEngine implements PdfEngine {
     });
   }
 
-  open(bytes: Uint8Array, name: string) {
-    return this.call<DocInfo>("open", [bytes, name], [bytes.buffer as ArrayBuffer]);
+  /** The bytes are handed to the worker (not copied) unless a password may be needed, when a retry needs them. */
+  open(bytes: Uint8Array, name: string, password?: string, keepBytes = false) {
+    return this.call<DocInfo>("open", [bytes, name, password], keepBytes ? [] : [bytes.buffer as ArrayBuffer]);
+  }
+  unlock(docId: string, password: string) {
+    return this.call<DocInfo>("unlock", [docId, password]);
   }
   close(docId: string) {
     return this.call<void>("close", [docId]);

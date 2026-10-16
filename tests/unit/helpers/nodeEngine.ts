@@ -6,7 +6,8 @@ import { setEngine } from "../../../src/engine/client";
 export function useNodeEngine(): EngineCore {
   const core = new EngineCore();
   const e: PdfEngine = {
-    open: async (b, n) => core.open(b, n),
+    open: async (b, n, pw) => core.open(b, n, undefined, pw),
+    unlock: async (d, pw) => core.unlock(d, pw),
     close: async (id) => core.close(id),
     render: async (r) => {
       const raw = core.render(r);

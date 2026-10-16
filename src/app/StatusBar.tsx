@@ -2,6 +2,7 @@ import { useState } from "react";
 import { activeTab, setSnap, setView, useApp } from "../state/store";
 import { goBack, goForward, jumpTo } from "../features/links/navigate";
 import { Icon } from "./icons";
+import { openSecurity, securitySummary } from "../features/security/SecurityDialog";
 import { clampScale } from "../features/viewer/Viewer";
 
 /** Finds a page by number ("12") or by label ("M-012"); returns the page index or -1. */
@@ -104,6 +105,11 @@ export function StatusBar() {
           </select>
         )}
       </span>
+      {(tab.info.security.encrypted || tab.state.security) && (
+        <button className="secured" onClick={openSecurity} title={securitySummary(tab)} data-testid="security-status">
+          {tab.state.security === "none" ? "Unsecured on save" : tab.state.security ? "Secured on save" : tab.info.security.owner ? "Secured" : "Restricted"}
+        </button>
+      )}
       <span className="muted" data-testid="markup-count">{tab.markupsLoaded ? `${markupCount} markup${markupCount === 1 ? "" : "s"}` : "Reading markups…"}</span>
       <span className="muted">Author: {author}</span>
     </div>

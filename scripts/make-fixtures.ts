@@ -3,6 +3,8 @@
  *
  *   dense-a1.pdf        A1 landscape sheet with about 20,000 vector paths and a title block
  *   calibration.pdf     A3 sheet drawn at 1:100 with known dimensions (see calibration.json)
+ *   secured.pdf         the form fixture with an open password "drawset" and permissions password "owner-pw" (print only)
+ *   restricted.pdf      the form fixture without an open password; permissions password "owner-pw"; printing and form filling only
  *   calibration-rev.pdf the same sheet revised: a new 60 x 30 pt box at (700, 500) and a new line (900,150)-(1000,150)
  *   set-200.pdf         200-page A1 set with page labels M-001…, bookmarks and planted search terms
  *   scanned.pdf         one page holding a single raster image and no text
@@ -12,7 +14,7 @@
  * Usage: npm run fixtures            (BIG=1 makes set-200 roughly 100 MB with embedded noise images)
  */
 import * as mupdf from "mupdf";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const outDir = process.argv[2] ?? "fixtures";
@@ -353,6 +355,20 @@ function makeAnnotated() {
   save(doc, "annotated.pdf");
 }
 
+function makeSecured() {
+  const src = mupdf.Document.openDocument(readFileSync(join(outDir, "form.pdf")), "application/pdf").asPDF()!;
+  // /P: reserved bits set; print (bit 3) and, for restricted.pdf, form filling (bit 9)
+  const P = (bits: number) => (~0xf3f & ~0x3) | (1 << 9) | bits;
+  for (const [name, opts] of [
+    ["secured.pdf", `encrypt=aes-256,user-password=drawset,owner-password=owner-pw,permissions=${P(1 << 2)}`],
+    ["restricted.pdf", `encrypt=aes-256,owner-password=owner-pw,permissions=${P((1 << 2) | (1 << 8))}`],
+  ] as const) {
+    const bytes = src.saveToBuffer(`compress,garbage,${opts}`).asUint8Array();
+    writeFileSync(join(outDir, name), bytes);
+    console.log(`${name}: ${(bytes.length / 1048576).toFixed(1)} MB`);
+  }
+}
+
 function makeForm() {
   const doc = new mupdf.PDFDocument();
   const helv = helvetica(doc);
@@ -390,4 +406,5 @@ make200();
 makeScanned();
 makeAnnotated();
 makeForm();
+makeSecured();
 console.log(`fixtures written to ${outDir} in ${((Date.now() - t0) / 1000).toFixed(1)} s`);

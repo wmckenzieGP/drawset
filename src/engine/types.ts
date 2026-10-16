@@ -35,6 +35,7 @@ export interface DocInfo {
   title: string;
   canSaveIncrementally: boolean;
   hasForm: boolean;
+  security: DocSecurity;
   /** Drawset header and footer settings saved in the file (JSON), or null. */
   headerFooter: string | null;
 }
@@ -87,6 +88,8 @@ export interface SavePlan {
   flatten?: boolean;
   /** Form field values by field name (already applied to the open document; repeated for copies). */
   fieldValues?: Record<string, string>;
+  /** New passwords and permissions ("none" removes security); forces a full save. */
+  security?: SecuritySpec | "none";
   /** Burn form fields into the page content (permanent). */
   flattenForms?: boolean;
   /** Page labels for the saved pages, in plan order; omitted when unchanged. */
@@ -102,6 +105,37 @@ export interface SaveResult {
   bytes: Uint8Array;
   info: DocInfo;
   markups: MarkupRecord[];
+}
+
+export interface Permissions {
+  print: boolean;
+  copy: boolean;
+  /** Changing the document (content, pages). */
+  edit: boolean;
+  /** Adding and changing comments and markups. */
+  annotate: boolean;
+  /** Filling in form fields. */
+  form: boolean;
+  /** Inserting, deleting and rotating pages. */
+  assemble: boolean;
+}
+
+export interface DocSecurity {
+  encrypted: boolean;
+  /** Encryption as MuPDF describes it, e.g. "Standard V5 R6 256-bit AES". */
+  method: string;
+  /** The file needs a password to open. */
+  openPassword: boolean;
+  /** Full rights: no restrictions, or the permissions password was given. */
+  owner: boolean;
+  permissions: Permissions;
+}
+
+/** New security to write on save (AES-256). Empty user password: anyone can open it. */
+export interface SecuritySpec {
+  userPassword: string;
+  ownerPassword: string;
+  permissions: Permissions;
 }
 
 export type HFPosition = "tl" | "tc" | "tr" | "bl" | "bc" | "br";
@@ -159,7 +193,7 @@ export interface ImagePdfPage {
 }
 
 export interface PdfEngine {
-  open(bytes: Uint8Array, name: string): Promise<DocInfo>;
+  open(bytes: Uint8Array, name: string, password?: string, keepBytes?: boolean): Promise<DocInfo>;
   close(docId: string): Promise<void>;
   render(req: RenderRequest): Promise<Bitmap>;
   /** Appearance of one annotation (for annotations Drawset draws from their own /AP). */
@@ -177,6 +211,8 @@ export interface PdfEngine {
   saveCopy(docId: string, plan: SavePlan): Promise<Uint8Array>;
   /** Replaces Drawset's headers, footers and watermark on pages (physical index; null removes); returns pages changed. */
   setDecorations(docId: string, pages: Record<number, Decoration | null>, spec: string | null): Promise<number[]>;
+  /** Gives full rights with the permissions password; throws WRONG_PASSWORD. */
+  unlock(docId: string, password: string): Promise<DocInfo>;
   /** The document's form fields. */
   formFields(docId: string): Promise<FormField[]>;
   /** Fills fields in the open document (by name); returns the physical pages that changed. */

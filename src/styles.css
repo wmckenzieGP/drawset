@@ -1298,3 +1298,28 @@ input.small {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* security */
+.security-dialog .sec-pw {
+  display: flex;
+  gap: 6px;
+  margin: 4px 0 10px 22px;
+}
+.security-dialog .sec-pw input {
+  flex: 1;
+  min-width: 0;
+}
+.security-dialog .sec-perms {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0 0 10px 22px;
+}
+.statusbar .secured {
+  color: var(--accent);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+}

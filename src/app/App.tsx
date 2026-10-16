@@ -3,6 +3,8 @@ import { RedactDialog, openRedactDialog } from "../features/redact/RedactDialog"
 import { FormsPanel } from "../features/forms/FormsPanel";
 import { flattenForms } from "../features/forms/forms";
 import { ToolChestPanel, addSelectionToChest } from "../features/toolchest/ToolChestPanel";
+import { AskDialog } from "./AskDialog";
+import { SecurityDialog, openSecurity } from "../features/security/SecurityDialog";
 import { LinkDialog } from "../features/links/LinkDialog";
 import { goBack, goForward } from "../features/links/navigate";
 import { HeaderFooterDialog, openHeaderFooter } from "../features/headerFooter/HeaderFooterDialog";
@@ -115,6 +117,7 @@ function MenuBar() {
         <Sep />
         <Item label="Print…" shortcut="Ctrl+P" onSelect={openPrintDialog} disabled={!has} />
         <Item label="Flatten markups…" onSelect={cmd.flatten} disabled={!has} />
+        <Item label="Security…" onSelect={openSecurity} disabled={!has} />
         <Item label="Flatten form fields…" onSelect={() => tab && flattenForms(tab)} disabled={!tab?.fields?.length} />
         <Sep />
         <Item label="Preferences…" onSelect={openPreferences} />
@@ -376,6 +379,8 @@ export function App() {
       <LabelRegionDialog />
       <HeaderFooterDialog />
       <LinkDialog />
+      <AskDialog />
+      <SecurityDialog />
       <PreferencesDialog />
       {dragOver && <div className="drop-hint">Drop PDF files to open them</div>}
     </div>

@@ -5,7 +5,7 @@
 import type { ChestTool } from "../features/toolchest/chest";
 import type { HFSpec } from "../features/headerFooter/hf";
 import { create } from "zustand";
-import type { DocInfo, FormField, MarkupRecord, OutlineNode, PageInfo, SearchHit } from "../engine/types";
+import type { DocInfo, FormField, MarkupRecord, SecuritySpec, OutlineNode, PageInfo, SearchHit } from "../engine/types";
 import type { Quad, Rect } from "../markup/geometry";
 import { DEFAULT_STYLE, type Markup, type MarkupKind, type MarkupStyle } from "../markup/model";
 import { isMeasure, type PageScale } from "../markup/measure";
@@ -32,6 +32,8 @@ export interface DocState {
   outline?: OutlineNode[];
   /** Header, footer and watermark settings; undefined keeps the file's, null removes them. */
   headerFooter?: HFSpec | null;
+  /** New passwords and permissions to save; "none" removes them; undefined keeps the file's. */
+  security?: SecuritySpec | "none";
   /** Form field values changed since the file was opened or saved, by field name. */
   fields?: Record<string, string>;
 }

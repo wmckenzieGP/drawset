@@ -1,6 +1,7 @@
 /** Opening, saving and closing documents: glue between the store, the engine and the host. */
 import { engine } from "../engine/client";
-import type { Decoration, SavePlan } from "../engine/types";
+import type { Decoration, DocInfo, SavePlan } from "../engine/types";
+import { askText } from "../app/AskDialog";
 import { currentSpec, decorationsFor, specJson } from "../features/headerFooter/hf";
 import { sameScale } from "../markup/measure";
 import { openPdfDialog, rememberRecentName, readPath, saveAs, saveInPlace, setDirty, type OpenedFile } from "../platform/host";
@@ -18,7 +19,11 @@ export async function openFiles(files: OpenedFile[]) {
     }
     try {
       useApp.setState({ busy: `Opening ${f.name}…` });
-      const info = await engine().open(f.bytes, f.name);
+      const info = await openWithPassword(f);
+      if (!info) {
+        useApp.setState({ busy: null });
+        continue;
+      }
       const key = addTab(info, f.name, f.path);
       rememberRecentName(f.name);
       if (info.hasForm) loadFields(key);
@@ -34,6 +39,40 @@ export async function openFiles(files: OpenedFile[]) {
     } catch (e) {
       useApp.setState({ busy: null });
       flash(`Could not open ${f.name}: ${(e as Error).message}`, "error");
+    }
+  }
+}
+
+const ENCRYPT = new TextEncoder().encode("/Encrypt");
+
+/** Whether the file may be encrypted (then the bytes are copied to the engine so a retry with a password can reuse them). */
+function mayBeEncrypted(bytes: Uint8Array): boolean {
+  const first = ENCRYPT[0];
+  for (let i = bytes.indexOf(first); i >= 0 && i <= bytes.length - ENCRYPT.length; i = bytes.indexOf(first, i + 1)) {
+    let k = 1;
+    while (k < ENCRYPT.length && bytes[i + k] === ENCRYPT[k]) k++;
+    if (k === ENCRYPT.length) return true;
+  }
+  return false;
+}
+
+/** Opens a file, asking for its password when it has one; null when the user gives up. */
+async function openWithPassword(f: OpenedFile): Promise<DocInfo | null> {
+  const keep = mayBeEncrypted(f.bytes);
+  let password: string | undefined;
+  let note = "";
+  for (;;) {
+    try {
+      return await engine().open(keep ? f.bytes.slice() : f.bytes, f.name, password, keep);
+    } catch (e) {
+      const msg = (e as Error).message;
+      if (msg !== "NEEDS_PASSWORD" && msg !== "WRONG_PASSWORD") throw e;
+      if (msg === "WRONG_PASSWORD") note = "That password is not right. Try again.";
+      useApp.setState({ busy: null });
+      const pw = await askText({ title: `${f.name} is protected`, label: "Password", password: true, note: note || "Type the password to open this file.", ok: "Open" });
+      if (pw === null) return null;
+      password = pw;
+      useApp.setState({ busy: `Opening ${f.name}…` });
     }
   }
 }
@@ -171,6 +210,7 @@ export function buildPlan(t: DocTab, state: DocState = t.state, opts: SaveOption
     ...(outline ? { outline } : {}),
     ...(state.fields && Object.keys(state.fields).length ? { fieldValues: state.fields } : {}),
     ...(opts.flattenForms ? { flattenForms: true } : {}),
+    ...(state.security !== undefined ? { security: state.security } : {}),
     pages: pages.map((p) => ({ index: p.src, rotate: (p.info.rotate + p.rotation) % 360, ...(sameScale(p.scale, p.info.scale) ? {} : { scale: p.scale }) })),
     upserts,
     deletes,
@@ -185,10 +225,49 @@ function syncDirtyFlag() {
 }
 useApp.subscribe(syncDirtyFlag);
 
+/** Why the file's permissions forbid this save (null when they allow it). */
+export function rightsBlock(t: DocTab, plan: SavePlan): string | null {
+  const sec = t.info.security;
+  if (sec.owner) return null;
+  const p = sec.permissions;
+  const pagesChanged = plan.pages.length !== t.info.pageCount || plan.pages.some((x, i) => x.index !== i || x.rotate !== t.info.pages[i].rotate || x.scale !== undefined);
+  if (plan.security !== undefined) return "Changing passwords and permissions needs the permissions password.";
+  if (plan.flatten || plan.flattenForms || plan.applyRedactions || plan.pageLabels || plan.outline || pagesChanged || t.state.headerFooter !== undefined) {
+    if (!p.edit || (pagesChanged && !p.assemble)) return "This file's permissions do not allow changing its pages or content.";
+  }
+  if ((plan.upserts.length || plan.deletes.length) && !p.annotate) return "This file's permissions do not allow adding or changing markups.";
+  if (plan.fieldValues && !p.form && !p.annotate) return "This file's permissions do not allow filling in its form.";
+  return null;
+}
+
+/**
+ * A file whose permissions forbid changes needs its permissions password before Drawset changes it.
+ * Returns false when the user cancels.
+ */
+export async function ensureRights(key: string, why = "This file's permissions do not allow changes."): Promise<boolean> {
+  let note = why;
+  for (;;) {
+    const t = useApp.getState().tabs.find((x) => x.key === key);
+    if (!t) return false;
+    if (t.info.security.owner) return true;
+    const pw = await askText({ title: "Permissions password", label: "Permissions password", password: true, note: `${note} Type the permissions password to continue.`, ok: "Unlock" });
+    if (pw === null) return false;
+    try {
+      const info = await engine().unlock(t.docId, pw);
+      updateTab(key, (x) => ({ ...x, info }));
+      return true;
+    } catch {
+      note = "That password is not right.";
+    }
+  }
+}
+
 /** Saves in place (incremental) and reloads the document from the saved bytes. */
 export async function saveTab(key: string, opts: SaveOptions = {}): Promise<boolean> {
   const t = useApp.getState().tabs.find((x) => x.key === key);
   if (!t) return false;
+  const blocked = rightsBlock(t, buildPlan(t, t.state, opts));
+  if (blocked && !(await ensureRights(key, blocked))) return false;
   try {
     useApp.setState({ busy: "Saving…" });
     const plan = buildPlan(t, t.state, opts);
@@ -237,6 +316,7 @@ export async function saveActive() {
 export async function saveCopyOf(key: string, pageIds?: string[], suggestedName?: string): Promise<boolean> {
   const t = useApp.getState().tabs.find((x) => x.key === key);
   if (!t) return false;
+  if (!t.info.security.owner && !(await ensureRights(key, "Saving a copy of a restricted file needs the permissions password."))) return false;
   try {
     useApp.setState({ busy: "Writing copy…" });
     const bytes = await engine().saveCopy(t.docId, buildPlan(t, t.state, { pageIds }));

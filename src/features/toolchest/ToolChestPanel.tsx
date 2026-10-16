@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { askText } from "../../app/AskDialog";
 import { Icon } from "../../app/icons";
 import { KIND_LABELS, type RGB } from "../../markup/model";
 import { saveAs } from "../../platform/host";
@@ -41,8 +42,8 @@ function ToolRow({ tool, active }: { tool: ChestTool; active: boolean }) {
       <button
         className="icon-btn"
         title="Rename"
-        onClick={() => {
-          const name = window.prompt("Tool name", tool.name);
+        onClick={async () => {
+          const name = await askText({ title: "Rename tool", label: "Tool name", initial: tool.name });
           if (name?.trim()) updateTool(tool.id, { name: name.trim() });
         }}
       >
@@ -86,8 +87,8 @@ export function ToolChestPanel({ tab }: { tab: DocTab }) {
       <div className="tc-actions">
         <button
           className="btn"
-          onClick={() => {
-            const name = window.prompt("Name of the new set", "New set");
+          onClick={async () => {
+            const name = await askText({ title: "New set", label: "Name of the new set", initial: "New set" });
             if (name?.trim()) addSet(name.trim());
           }}
           data-testid="tc-new-set"
@@ -135,8 +136,8 @@ export function ToolChestPanel({ tab }: { tab: DocTab }) {
             <button
               className="icon-btn"
               title="Rename set"
-              onClick={() => {
-                const name = window.prompt("Set name", set.name);
+              onClick={async () => {
+                const name = await askText({ title: "Rename set", label: "Set name", initial: set.name });
                 if (name?.trim()) renameSet(set.id, name.trim());
               }}
             >

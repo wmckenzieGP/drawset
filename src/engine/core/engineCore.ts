@@ -12,6 +12,7 @@ import { buildImagePdf } from "./imagePdf";
 import { collectSnapGeometry } from "./snapGeometry";
 import { readFields, setFieldValues } from "./forms";
 import { readDecorationSpec, setDecorations } from "./decorations";
+import { NEEDS_PASSWORD, readSecurity, securityOptions, WRONG_PASSWORD } from "./security";
 import { textInRect, writeOutline, writePageLabels } from "./labels";
 import { safePageScale, writePageScale } from "./measureDict";
 
@@ -50,6 +51,10 @@ class Lru<K, V extends { destroy?: () => void }> {
 interface OpenDoc {
   doc: mupdf.PDFDocument;
   name: string;
+  /** Kept (in the engine only) to reopen the file after saving. */
+  password?: string;
+  openPassword: boolean;
+  owner: boolean;
   lists: Lru<number, mupdf.DisplayList>;
   annotLists: Lru<number, mupdf.DisplayList>;
   stext: Lru<number, mupdf.StructuredText>;
@@ -57,12 +62,23 @@ interface OpenDoc {
 
 let nextDoc = 1;
 
-export function openPdf(bytes: Uint8Array): mupdf.PDFDocument {
+/**
+ * Opens a PDF. A password opens a protected file (NEEDS_PASSWORD / WRONG_PASSWORD otherwise) and, when it is
+ * the permissions password, gives full rights.
+ */
+export function openPdf(bytes: Uint8Array, password?: string): mupdf.PDFDocument {
+  return openPdfAuth(bytes, password).doc;
+}
+
+function openPdfAuth(bytes: Uint8Array, password?: string): { doc: mupdf.PDFDocument; openPassword: boolean; owner: boolean } {
   const doc = mupdf.Document.openDocument(bytes, "application/pdf");
   const pdf = doc.asPDF();
   if (!pdf) throw new Error("This file is not a PDF.");
-  if (pdf.needsPassword()) throw new Error("This PDF is protected with a password. Password-protected files are not supported yet.");
-  return pdf;
+  const openPassword = pdf.needsPassword();
+  if (openPassword && !password) throw new Error(NEEDS_PASSWORD);
+  const rc = password ? pdf.authenticatePassword(password) : 1;
+  if (openPassword && rc === 0) throw new Error(WRONG_PASSWORD);
+  return { doc: pdf, openPassword, owner: (rc & 4) !== 0 };
 }
 
 function pageRotate(page: mupdf.PDFPage): number {
@@ -141,13 +157,22 @@ export class EngineCore {
     return this.get(docId).doc;
   }
 
-  open(bytes: Uint8Array, name: string, docId?: string): DocInfo {
-    const doc = openPdf(bytes);
+  open(bytes: Uint8Array, name: string, docId?: string, password?: string): DocInfo {
+    const { doc, openPassword, owner } = openPdfAuth(bytes, password);
     const id = docId ?? `doc${nextDoc++}`;
     const prev = this.docs.get(id);
     if (prev) this.dropCaches(prev);
-    this.docs.set(id, { doc, name, lists: new Lru(6), annotLists: new Lru(4), stext: new Lru(12) });
+    this.docs.set(id, { doc, name, password, openPassword, owner, lists: new Lru(6), annotLists: new Lru(4), stext: new Lru(12) });
     return this.info(id);
+  }
+
+  unlock(docId: string, password: string): DocInfo {
+    const d = this.get(docId);
+    const rc = d.doc.authenticatePassword(password);
+    if (!(rc & 4)) throw new Error(WRONG_PASSWORD);
+    d.owner = true;
+    d.password = password;
+    return this.info(docId);
   }
 
   private dropCaches(d: OpenDoc) {
@@ -165,7 +190,8 @@ export class EngineCore {
   }
 
   info(docId: string): DocInfo {
-    const { doc, name } = this.get(docId);
+    const d = this.get(docId);
+    const { doc, name } = d;
     const n = doc.countPages();
     const pages: PageInfo[] = [];
     for (let i = 0; i < n; i++) pages.push(pageInfo(doc, i));
@@ -185,6 +211,7 @@ export class EngineCore {
       title,
       canSaveIncrementally: doc.canBeSavedIncrementally(),
       headerFooter: readDecorationSpec(doc),
+      security: readSecurity(doc, d.openPassword, d.owner),
       hasForm: acro.isDictionary() && acro.get("Fields").isArray() && acro.get("Fields").length > 0,
     };
   }
@@ -427,10 +454,13 @@ export class EngineCore {
   save(docId: string, plan: SavePlan, mode: "incremental" | "full"): { bytes: Uint8Array; info: DocInfo; markups: MarkupRecord[] } {
     const d = this.get(docId);
     EngineCore.applyPlan(d.doc, plan);
-    // after redaction the removed content must not survive in an earlier revision of the file
-    const incremental = mode === "incremental" && !plan.applyRedactions && d.doc.canBeSavedIncrementally();
-    const bytes = d.doc.saveToBuffer(incremental ? "incremental" : "compress,garbage=compact").asUint8Array().slice();
-    const info = this.open(bytes, d.name, docId);
+    // after redaction the removed content must not survive in an earlier revision of the file;
+    // new security needs a full rewrite too
+    const sec = securityOptions(plan.security);
+    const incremental = mode === "incremental" && !plan.applyRedactions && !sec && d.doc.canBeSavedIncrementally();
+    const bytes = d.doc.saveToBuffer(incremental ? "incremental" : ["compress,garbage=compact", sec].filter(Boolean).join(",")).asUint8Array().slice();
+    const password = plan.security === "none" ? undefined : plan.security ? plan.security.ownerPassword || plan.security.userPassword : d.password;
+    const info = this.open(bytes, d.name, docId, password);
     return { bytes, info, markups: this.readMarkups(docId) };
   }
 
@@ -468,9 +498,10 @@ export class EngineCore {
   saveCopy(docId: string, plan: SavePlan): Uint8Array {
     const d = this.get(docId);
     // work on a copy so the open document keeps its unsaved state
-    const tmp = openPdf(d.doc.saveToBuffer("").asUint8Array().slice());
+    const tmp = openPdf(d.doc.saveToBuffer("").asUint8Array().slice(), d.password);
     EngineCore.applyPlan(tmp, plan);
-    const bytes = tmp.saveToBuffer("compress,garbage=compact").asUint8Array().slice();
+    const sec = securityOptions(plan.security);
+    const bytes = tmp.saveToBuffer(["compress,garbage=compact", sec].filter(Boolean).join(",")).asUint8Array().slice();
     tmp.destroy();
     return bytes;
   }

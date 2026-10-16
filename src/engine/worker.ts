@@ -6,7 +6,8 @@ const core = new EngineCore();
 
 type Handler = (...args: any[]) => unknown;
 const methods: Record<string, Handler> = {
-  open: (bytes: Uint8Array, name: string) => core.open(bytes, name),
+  open: (bytes: Uint8Array, name: string, password?: string) => core.open(bytes, name, undefined, password),
+  unlock: (docId: string, password: string) => core.unlock(docId, password),
   close: (docId: string) => core.close(docId),
   render: (req) => core.render(req),
   renderAnnotation: (docId: string, page: number, objNum: number, scale: number) => core.renderAnnotation(docId, page, objNum, scale),
