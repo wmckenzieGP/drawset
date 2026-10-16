@@ -1,5 +1,6 @@
 import { MeasurePanel } from "../features/measure/MeasurePanel";
 import { RedactDialog, openRedactDialog } from "../features/redact/RedactDialog";
+import { ToolChestPanel, addSelectionToChest } from "../features/toolchest/ToolChestPanel";
 import { OverlayDialog, openOverlayDialog } from "../features/overlay/OverlayDialog";
 import { CalibrateDialog, openCalibrateDialog } from "../features/measure/CalibrateDialog";
 import { useEffect, useState } from "react";
@@ -122,6 +123,8 @@ function MenuBar() {
         <Sep />
         <Item label="Lock" shortcut="Ctrl+L" onSelect={() => cmd.setLocked(true)} disabled={!sel} />
         <Item label="Unlock" shortcut="Ctrl+Shift+L" onSelect={() => cmd.setLocked(false)} disabled={!sel} />
+        <Sep />
+        <Item label="Add to Tool Chest" onSelect={() => tab && addSelectionToChest(tab)} disabled={!sel} />
       </TopMenu>
       <TopMenu label="View">
         <Item label="Zoom in" shortcut="Ctrl++" onSelect={cmd.zoomIn} disabled={!has} />
@@ -136,6 +139,7 @@ function MenuBar() {
         <Item label="Thumbnails" onSelect={() => useApp.setState((s) => ({ leftPanel: s.leftPanel === "thumbnails" ? null : "thumbnails" }))} />
         <Item label="Bookmarks" onSelect={() => useApp.setState((s) => ({ leftPanel: s.leftPanel === "bookmarks" ? null : "bookmarks" }))} />
         <Item label="Search" shortcut="Ctrl+F" onSelect={() => useApp.setState({ leftPanel: "search" })} />
+        <Item label="Tool Chest" onSelect={() => useApp.setState((s) => ({ leftPanel: s.leftPanel === "toolchest" ? null : "toolchest" }))} />
         <Item label="Properties" onSelect={() => useApp.setState((s) => ({ rightPanel: !s.rightPanel }))} />
         <Item label="Markups List" shortcut="Alt+L" onSelect={() => useApp.setState((s) => ({ bottomPanel: !s.bottomPanel }))} />
       </TopMenu>
@@ -298,15 +302,16 @@ export function App() {
         {tab && leftPanel && (
           <aside className="panel left" aria-label="Side panel">
             <div className="panel-tabs">
-              {(["thumbnails", "bookmarks", "search"] as const).map((p) => (
-                <button key={p} className={leftPanel === p ? "active" : ""} onClick={() => useApp.setState({ leftPanel: p })} title={p[0].toUpperCase() + p.slice(1)} data-testid={`panel-${p}`}>
-                  <Icon name={p === "thumbnails" ? "pages" : p === "bookmarks" ? "bookmark" : "search"} size={16} />
+              {(["thumbnails", "bookmarks", "search", "toolchest"] as const).map((p) => (
+                <button key={p} className={leftPanel === p ? "active" : ""} onClick={() => useApp.setState({ leftPanel: p })} title={p === "toolchest" ? "Tool Chest" : p[0].toUpperCase() + p.slice(1)} data-testid={`panel-${p}`}>
+                  <Icon name={p === "thumbnails" ? "pages" : p === "bookmarks" ? "bookmark" : p === "toolchest" ? "chest" : "search"} size={16} />
                 </button>
               ))}
             </div>
             {leftPanel === "thumbnails" && <ThumbnailsPanel tab={tab} />}
             {leftPanel === "bookmarks" && <BookmarksPanel tab={tab} />}
             {leftPanel === "search" && <SearchPanel tab={tab} />}
+            {leftPanel === "toolchest" && <ToolChestPanel tab={tab} />}
           </aside>
         )}
         <section className="center">

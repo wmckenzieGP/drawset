@@ -2,6 +2,7 @@
  * Application state. Each open document is a tab with an undoable DocState (pages + markups).
  * Every document change goes through `commit`, which records a snapshot for undo/redo.
  */
+import type { ChestTool } from "../features/toolchest/chest";
 import { create } from "zustand";
 import type { DocInfo, MarkupRecord, PageInfo, SearchHit } from "../engine/types";
 import type { Quad, Rect } from "../markup/geometry";
@@ -79,6 +80,8 @@ export type ToolId =
   | "zoom"
   | "calibrate"
   | "cutout"
+  /** Places a copy of the active Tool Chest tool. */
+  | "chest"
   | MarkupKind;
 
 export interface ToolState {
@@ -89,6 +92,8 @@ export interface ToolState {
   stampId: string;
   /** Pending image for stamp/image tools. */
   pendingImage: Markup["image"] | null;
+  /** Active Tool Chest tool: its properties apply to the next markup (or it is placed as a copy). */
+  chest: ChestTool | null;
 }
 
 export interface AppState {
@@ -96,7 +101,7 @@ export interface AppState {
   active: string | null;
   tools: ToolState;
   author: string;
-  leftPanel: "thumbnails" | "bookmarks" | "search" | null;
+  leftPanel: "thumbnails" | "bookmarks" | "search" | "toolchest" | null;
   rightPanel: boolean;
   bottomPanel: boolean;
   message: { text: string; kind: "info" | "error" } | null;
@@ -137,7 +142,7 @@ function loadAuthor(): string {
 export const useApp = create<AppState>(() => ({
   tabs: [],
   active: null,
-  tools: { tool: "select", reuse: false, defaults: {}, stampId: "approved", pendingImage: null },
+  tools: { tool: "select", reuse: false, defaults: {}, stampId: "approved", pendingImage: null, chest: null },
   author: loadAuthor(),
   leftPanel: "thumbnails",
   rightPanel: true,

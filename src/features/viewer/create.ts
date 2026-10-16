@@ -2,6 +2,7 @@
 import { stampDef, stampSize, textBoxHeight, textPadding } from "../../markup/appearance";
 import { bboxOf, normRect, type Pt, type Quad, type Rect } from "../../markup/geometry";
 import { KIND_LABELS, newId, nowIso, type Markup, type MarkupKind } from "../../markup/model";
+import { applyTemplate } from "../toolchest/chest";
 import { defaultStyleFor, useApp, type PageEntry } from "../../state/store";
 
 export function toolStyle(kind: MarkupKind) {
@@ -11,7 +12,7 @@ export function toolStyle(kind: MarkupKind) {
 
 export function baseMarkup(kind: MarkupKind, pageId: string): Markup {
   const now = nowIso();
-  return {
+  const m: Markup = {
     id: newId(),
     pageId,
     kind,
@@ -31,6 +32,9 @@ export function baseMarkup(kind: MarkupKind, pageId: string): Markup {
     icon: "Comment",
     replies: [],
   };
+  // a Tool Chest tool in drawing mode gives the new markup its saved properties
+  const chest = useApp.getState().tools.chest;
+  return chest && chest.mode === "draw" ? applyTemplate(m, chest.template) : m;
 }
 
 export function boxMarkup(kind: MarkupKind, pageId: string, a: Pt, b: Pt): Markup {

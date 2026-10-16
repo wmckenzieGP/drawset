@@ -2,6 +2,7 @@
  * Pointer and keyboard interaction for the viewer: navigation, selection and editing, and every drawing tool.
  * Transient state lives here; document changes go through `commit` so they are undoable.
  */
+import { markupFromTool } from "../toolchest/chest";
 import { create } from "zustand";
 import { engine } from "../../engine/client";
 import { apply, normRect, snapAngle, snapSquare, type Pt, type Quad, type Rect, dist, rectContains, transformRect } from "../../markup/geometry";
@@ -186,13 +187,13 @@ export class Controller {
 
   // ---------- creating ----------
 
-  private finishCreate(m: Markup, label?: string) {
+  private finishCreate(m: Markup, label?: string, edit = true) {
     const tab = this.host.tab();
     if (!tab) return;
     commit(tab.key, `Add ${label ?? KIND_LABELS[m.kind]}`, (s) => withMarkups(s, [m]));
     this.setSelection([m.id]);
-    if (m.kind === "textbox" || m.kind === "callout") useInteraction.setState({ editingId: m.id });
-    if (!useApp.getState().tools.reuse) useApp.setState((s) => ({ tools: { ...s.tools, tool: "select" } }));
+    if (edit && (m.kind === "textbox" || m.kind === "callout")) useInteraction.setState({ editingId: m.id });
+    if (!useApp.getState().tools.reuse) useApp.setState((s) => ({ tools: { ...s.tools, tool: "select", chest: null } }));
   }
 
   // ---------- pointer events ----------
@@ -282,6 +283,9 @@ export class Controller {
       this.drag = { t: "poly", kind: tool as PolyKind, page, pts: [p], cursor: p, downAt: p };
     } else if (tool === "note") {
       this.finishCreate(noteAt(page.entry.id, p));
+    } else if (tool === "chest") {
+      const chest = useApp.getState().tools.chest;
+      if (chest) this.finishCreate(markupFromTool(chest, page.entry, p, useApp.getState().author), chest.name, false);
     } else if (TEXT_TOOLS.has(tool)) {
       this.drag = { t: "textsel", kind: tool as "text", page, a: p, b: p, quads: [], text: "", seq: ++this.selSeq };
       if (tool === "text") updateTab(tab.key, (t) => ({ ...t, textSelection: null }));
@@ -549,7 +553,7 @@ export class Controller {
     if (!target) return;
     const measure = { scale: target.measure?.scale ?? null, cutouts: [...(target.measure?.cutouts ?? []), pts] };
     commit(tab.key, "Add cutout", (s) => withMarkups(s, [{ ...target, measure, modified: nowIso() }]));
-    if (!useApp.getState().tools.reuse) useApp.setState((s) => ({ tools: { ...s.tools, tool: "select" } }));
+    if (!useApp.getState().tools.reuse) useApp.setState((s) => ({ tools: { ...s.tools, tool: "select", chest: null } }));
   }
 
   cancel() {

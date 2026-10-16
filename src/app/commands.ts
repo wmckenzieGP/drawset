@@ -8,7 +8,7 @@ import { clampScale } from "../features/viewer/Viewer";
 let clipboard: { docId: string; markups: Markup[] } | null = null;
 
 export function setTool(tool: ToolId) {
-  useApp.setState((s) => ({ tools: { ...s.tools, tool } }));
+  useApp.setState((s) => ({ tools: { ...s.tools, tool, chest: null } }));
 }
 
 export function withActive(fn: (key: string) => void) {

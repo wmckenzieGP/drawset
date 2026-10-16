@@ -972,3 +972,87 @@ input.small {
   margin-right: auto;
   align-self: center;
 }
+
+.icon-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 3px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+}
+.icon-btn:hover {
+  background: var(--bg-4);
+}
+.toolchest .tc-actions {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.toolchest .tc-actions select {
+  min-width: 0;
+  flex: 1;
+}
+.tc-set-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 10px;
+}
+.tc-set-head .panel-subtitle {
+  flex: 1;
+  margin: 0;
+}
+.tc-list {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+}
+.tc-tool {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 4px;
+}
+.tc-tool.active {
+  background: var(--bg-4);
+  outline: 1px solid var(--accent);
+}
+.tc-use {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: inherit;
+  padding: 4px;
+  text-align: left;
+  cursor: pointer;
+}
+.tc-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tc-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid;
+  border-radius: 4px;
+  flex: none;
+}
+.tc-mode {
+  font-size: 11px;
+  background: var(--bg-3, transparent);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: inherit;
+  cursor: pointer;
+}
