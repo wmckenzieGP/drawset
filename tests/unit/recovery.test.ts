@@ -7,7 +7,7 @@ const read = (n: string) => new Uint8Array(readFileSync(`fixtures/${n}`));
 describe("crash recovery journal", () => {
   it("journals unsaved changes every minute, restores them onto a fresh copy of the file, and forgets them once saved", async () => {
     const { useNodeEngine } = await import("./helpers/nodeEngine");
-    const { addTab, commit, setLoadedMarkups, recordsToMarkups, updateTab, useApp, withMarkups, isDirty } = await import("../../src/state/store");
+    const { addTab, commit, setLoadedMarkups, updateTab, useApp, withMarkups, isDirty } = await import("../../src/state/store");
     const { buildPlan } = await import("../../src/state/documents");
     const J = await import("../../src/features/recovery/journal");
     const store = J.memoryStore();
@@ -19,8 +19,7 @@ describe("crash recovery journal", () => {
     const open = () => {
       const info = core.open(bytes, "annotated.pdf");
       const key = addTab(info, "annotated.pdf", "C:\\Jobs\\annotated.pdf");
-      const t0 = useApp.getState().tabs.find((t) => t.key === key)!;
-      setLoadedMarkups(key, recordsToMarkups(core.readMarkups(info.docId), t0.state.pages));
+      setLoadedMarkups(key, core.readMarkups(info.docId));
       updateTab(key, (t) => ({ ...t, fingerprint: sha }));
       return key;
     };

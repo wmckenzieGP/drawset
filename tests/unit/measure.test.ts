@@ -166,4 +166,26 @@ describe("measurements", () => {
     expect(vps.length).toBe(1);
     expect(vps.get(0).get("Measure").get("R").asString()).toBe("1 mm = 5 mm");
   });
+
+  it("a new scale replaces another editor's viewport over most of the page, so it is the one read back", () => {
+    const e = new EngineCore();
+    const doc = openMupdf(read("calibration.pdf"));
+    const page = doc.loadPage(0) as mupdf.PDFPage;
+    const [x0, y0, x1, y1] = page.getBounds();
+    // a drawing frame inset from the sheet edge: not the whole page, but most of it
+    const frame = doc.newDictionary();
+    frame.put("Type", doc.newName("Viewport"));
+    frame.put("BBox", [x0 + 20, y0 + 20, x1 - 20, y1 - 20]);
+    frame.put("Measure", { Type: doc.newName("Measure"), Subtype: doc.newName("RL"), R: doc.newString("1 mm = 50 mm"), X: [{ U: doc.newString("mm"), C: 17.63889, D: 1 }] });
+    page.getObject().put("VP", [frame]);
+    const info = e.open(doc.saveToBuffer("").asUint8Array().slice(), "frame.pdf");
+    expect(info.pages[0].scale).not.toBeNull();
+    expect(info.pages[0].scale).not.toEqual(S100);
+    const p = plan(info, []);
+    p.pages[0].scale = S100;
+    const res = e.save(info.docId, p, "full");
+    expect(res.info.pages[0].scale).toEqual(S100);
+    expect(e.open(res.bytes, "again.pdf").pages[0].scale).toEqual(S100);
+    expect((openMupdf(res.bytes).loadPage(0) as mupdf.PDFPage).getObject().get("VP").length).toBe(1);
+  });
 });

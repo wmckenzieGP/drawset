@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { useNodeEngine } from "./helpers/nodeEngine";
 import type { EngineCore } from "../../src/engine/core/engineCore";
-import { addTab, recordsToMarkups, setLoadedMarkups, undo, redo, useApp, type DocTab } from "../../src/state/store";
+import { addTab, setLoadedMarkups, undo, redo, useApp, type DocTab } from "../../src/state/store";
 import { buildPlan } from "../../src/state/documents";
 import { deletePages, insertBlankPage, insertFromFiles, movePages, parsePageRange, parseRangeGroups, rotatePages } from "../../src/features/pages/pageOps";
 import { openMupdf } from "./helpers/mupdf";
@@ -17,8 +17,7 @@ beforeAll(() => {
 async function openTab(name: string): Promise<string> {
   const info = core.open(read(name), name);
   const key = addTab(info, name, null);
-  const tab = tabOf(key);
-  setLoadedMarkups(key, recordsToMarkups(core.readMarkups(info.docId), tab.state.pages));
+  setLoadedMarkups(key, core.readMarkups(info.docId));
   return key;
 }
 const tabOf = (key: string): DocTab => useApp.getState().tabs.find((t) => t.key === key)!;

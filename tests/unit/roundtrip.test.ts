@@ -182,6 +182,9 @@ describe("markup round trips", () => {
         expect(back.points[i][0]).toBeCloseTo(m.points[i][0], 2);
         expect(back.points[i][1]).toBeCloseTo(m.points[i][1], 2);
       }
+      expect(back.quads.length, "quads").toBe(m.quads.length);
+      for (let i = 0; i < m.quads.length; i++) for (let k = 0; k < 8; k++) expect(back.quads[i][k]).toBeCloseTo(m.quads[i][k], 2);
+      expect(back.link, "only links have a target").toBeUndefined();
       if (m.contents) expect(back.contents).toBe(m.contents);
 
       // pdf.js sees the annotation and draws it like MuPDF does

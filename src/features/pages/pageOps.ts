@@ -3,7 +3,7 @@ import { engine } from "../../engine/client";
 import { buildPlan, saveCopyOf } from "../../state/documents";
 import { commit, flash, newPageId, recordsToMarkups, scrollToPage, updateTab, useApp, type DocTab, type PageEntry, type Rotation } from "../../state/store";
 import type { Markup } from "../../markup/model";
-import { desktop, saveAs, type OpenedFile } from "../../platform/host";
+import { saveMany, type OpenedFile } from "../../platform/host";
 
 /** Parses "1-3, 5, 8-" into 0-based page indices (in the order given, without duplicates). */
 export function parsePageRange(input: string, count: number): number[] | null {
@@ -68,7 +68,7 @@ export function deletePages(key: string, ids: string[]) {
   commit(key, ids.length > 1 ? `Delete ${ids.length} pages` : "Delete page", (s) => {
     const markups: Record<string, Markup> = {};
     for (const m of Object.values(s.markups)) if (!ids.includes(m.pageId)) markups[m.id] = m;
-    return { pages: s.pages.filter((p) => !ids.includes(p.id)), markups };
+    return { ...s, pages: s.pages.filter((p) => !ids.includes(p.id)), markups };
   });
   updateTab(key, (x) => ({ ...x, pageSelection: [], currentPage: Math.min(x.currentPage, x.state.pages.length - 1) }));
 }
@@ -121,6 +121,7 @@ export async function insertFromFiles(key: string, files: OpenedFile[], at?: num
   }
   const index = at ?? t.state.pages.length;
   commit(key, files.length > 1 ? "Combine files" : "Insert pages", (s) => ({
+    ...s,
     pages: [...s.pages.slice(0, index), ...entries, ...s.pages.slice(index)],
     markups: { ...s.markups, ...markups },
   }));
@@ -129,11 +130,6 @@ export async function insertFromFiles(key: string, files: OpenedFile[], at?: num
 
 function baseName(t: DocTab) {
   return t.name.replace(/\.pdf$/i, "");
-}
-
-function dirOf(p: string): string {
-  const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
-  return i >= 0 ? p.slice(0, i + 1) : "";
 }
 
 function rangeLabel(indices: number[]): string {
@@ -163,19 +159,17 @@ async function writeGroups(t: DocTab, groups: number[][], word: string) {
     await saveCopyOf(t.key, ids(g), `${baseName(t)} (${word} ${rangeLabel(g)}).pdf`);
     return;
   }
-  // several files: next to the original in the desktop app, downloads in the browser
-  let written = 0;
+  // several files: the desktop app asks for a folder once (and never replaces a file there); the browser downloads each
   try {
+    const files: { name: string; bytes: Uint8Array }[] = [];
     for (const g of groups) {
-      useApp.setState({ busy: `Writing ${written + 1} of ${groups.length}…` });
-      const plan = buildPlan(t, t.state, { pageIds: ids(g) });
-      const bytes = await engine().saveCopy(t.docId, plan);
-      const name = `${baseName(t)} (${word} ${rangeLabel(g)}).pdf`;
-      if (desktop && t.path) await desktop.saveFile(dirOf(t.path) + name, bytes);
-      else await saveAs(name, bytes);
-      written++;
+      useApp.setState({ busy: `Writing ${files.length + 1} of ${groups.length}…` });
+      const bytes = await engine().saveCopy(t.docId, buildPlan(t, t.state, { pageIds: ids(g) }));
+      files.push({ name: `${baseName(t)} (${word} ${rangeLabel(g)}).pdf`, bytes });
     }
-    flash(desktop && t.path ? `Wrote ${written} files next to ${t.name}.` : `Wrote ${written} files.`);
+    useApp.setState({ busy: null });
+    const written = await saveMany(t.path, files);
+    if (written !== null) flash(`Wrote ${written} files.`);
   } catch (e) {
     flash(`Could not write the files: ${(e as Error).message}`, "error");
   } finally {
