@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Tests before release
+    runs-on: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run fixtures
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+
+  release:
+    name: Build installer and publish release
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Set version from tag
+        shell: bash
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          parts=$(echo "$v" | awk -F. '{print NF}')
+          if [ "$parts" = "2" ]; then v="$v.0"; fi
+          if [ "$parts" = "1" ]; then v="$v.0.0"; fi
+          npm version "$v" --no-git-tag-version --allow-same-version
+      - run: npm run dist:win
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="Windows installer for Drawset ${GITHUB_REF_NAME}. See PROGRESS.md for what works and known gaps."
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release/*.exe --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release/*.exe --title "Drawset ${GITHUB_REF_NAME}" --notes "$notes"
+          fi
