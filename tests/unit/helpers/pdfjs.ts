@@ -1,9 +1,14 @@
 /** pdf.js as an independent second renderer for tests (Node, via @napi-rs/canvas). */
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createCanvas } from "@napi-rs/canvas";
+import { pathToFileURL } from "node:url";
+import { resolve } from "node:path";
+
+// pdf.js's own bundled standard fonts, so text draws the same on every machine (not whatever fonts it finds)
+const STANDARD_FONTS = pathToFileURL(resolve("node_modules/pdfjs-dist/standard_fonts")).href + "/";
 
 export async function openPdfjs(bytes: Uint8Array) {
-  const task = pdfjs.getDocument({ data: bytes.slice(), verbosity: 0, useSystemFonts: false, disableFontFace: true });
+  const task = pdfjs.getDocument({ data: bytes.slice(), verbosity: 0, useSystemFonts: false, standardFontDataUrl: STANDARD_FONTS, disableFontFace: true });
   const doc = await task.promise;
   return Object.assign(doc, { destroy: () => task.destroy() });
 }
