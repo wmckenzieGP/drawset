@@ -9,7 +9,7 @@ const CHUNK = 8;
 let searchSeq = 0;
 
 /** Searches the document in chunks so page rendering stays responsive; results stream in. */
-export async function runSearch(key: string, query: string) {
+export async function runSearch(key: string, query: string, navigate = true) {
   const seq = ++searchSeq;
   const t0 = useApp.getState().tabs.find((t) => t.key === key);
   if (!t0) return;
@@ -18,7 +18,7 @@ export async function runSearch(key: string, query: string) {
   // search pages in the current page order
   const pages = t0.state.pages.map((p) => p.src);
   const all: SearchHit[] = [];
-  let navigated = false;
+  let navigated = !navigate;
   for (let i = 0; i < pages.length; i += CHUNK) {
     if (seq !== searchSeq) return;
     const chunk = pages.slice(i, i + CHUNK);

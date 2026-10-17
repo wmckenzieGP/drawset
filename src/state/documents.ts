@@ -9,6 +9,7 @@ import { openPdfDialog, rememberRecentName, readPath, saveAs, saveInPlace, setDi
 import { renderCache } from "../features/viewer/renderCache";
 import { invalidateApBitmaps } from "../features/viewer/overlay";
 import { forgetContentIndexes } from "../features/viewer/snap";
+import { runSearch } from "../features/search/SearchPanel";
 import { addTab, activeTab, flash, isDirty, pagesFromInfo, recordsToMarkups, setLoadedMarkups, updateTab, useApp, type DocState, type DocTab } from "./store";
 
 export async function openFiles(files: OpenedFile[]) {
@@ -140,7 +141,9 @@ useApp.subscribe((s, prev) => {
 function contentChanged(key: string, docId: string, pages: number[]) {
   renderCache.refreshDoc(docId, new Set(pages));
   forgetContentIndexes(docId);
-  updateTab(key, (x) => (x.search.query ? { ...x, search: { query: "", hits: [], current: -1, running: false, done: false } } : x));
+  // results found in the old text are stale: search again quietly (a search already running reads the new text from here on)
+  const q = useApp.getState().tabs.find((x) => x.key === key)?.search;
+  if (q?.query && !q.running) void runSearch(key, q.query, false);
 }
 
 /** Each physical page's decoration (as JSON) that the engine document currently holds, per document. */
