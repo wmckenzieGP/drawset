@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 interface OpenedFile {
   path: string;
@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld("drawsetHost", {
   readFile: (p: string): Promise<OpenedFile> => ipcRenderer.invoke("read-file", p),
   saveFile: (p: string, bytes: Uint8Array): Promise<boolean> => ipcRenderer.invoke("save-file", p, bytes),
   saveDialog: (suggested: string): Promise<string | null> => ipcRenderer.invoke("save-dialog", suggested),
+  saveFilesInFolder: (suggestedDir: string | null, files: { name: string; bytes: Uint8Array }[]): Promise<string[] | null> =>
+    ipcRenderer.invoke("save-files-in-folder", suggestedDir, files),
+  pathForFile: (f: File): string => webUtils.getPathForFile(f),
   saveFileAs: (suggested: string, bytes: Uint8Array, filterName: string, ext: string): Promise<string | null> =>
     ipcRenderer.invoke("save-file-as", suggested, bytes, filterName, ext),
   recentList: (): Promise<string[]> => ipcRenderer.invoke("recent-list"),

@@ -303,7 +303,6 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
         if (ink.isArray()) for (let i = 0; i < ink.length; i++) rec.inks.push(pointsFrom(numArray(ink.get(i)), ctm));
         break;
       }
-      case "highlight":
       case "link": {
         rec.link = readLinkTarget(page._doc, obj) ?? undefined;
         // a link draws a border only with a width and a colour
@@ -311,6 +310,7 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
         rec.subject = rec.subject || "Hyperlink";
         break;
       }
+      case "highlight":
       case "underline":
       case "strikeout":
       case "redact":

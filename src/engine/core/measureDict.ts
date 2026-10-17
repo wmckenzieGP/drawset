@@ -74,6 +74,15 @@ function bboxOf(vp: mupdf.PDFObject): number[] {
   return out;
 }
 
+/** A viewport that sets the whole page's scale: a measure over the whole page, or over at least half of it. */
+function isPageScale(vp: mupdf.PDFObject, box: Rect): boolean {
+  if (!vp.isDictionary()) return false;
+  const b = bboxOf(vp);
+  const area = (box[2] - box[0]) * (box[3] - box[1]);
+  const big = b.length === 4 && Math.abs((b[2] - b[0]) * (b[3] - b[1])) >= area * 0.5;
+  return (big || covers(b, box)) && readMeasure(vp.get("Measure")) !== null;
+}
+
 /**
  * The page's scale: the last viewport (readers search /VP from the end) that covers most of the page and has
  * a rectilinear measure. Smaller viewports (detail views at other scales) are not the page scale.
@@ -82,23 +91,17 @@ export function readPageScale(page: mupdf.PDFPage): PageScale | null {
   const vps = page.getObject().get("VP");
   if (!vps.isArray()) return null;
   const box = pageUserBox(page);
-  const area = (box[2] - box[0]) * (box[3] - box[1]);
   let found: PageScale | null = null;
   for (let i = 0; i < vps.length; i++) {
     const vp = vps.get(i).resolve();
-    if (!vp.isDictionary()) continue;
-    const b = bboxOf(vp);
-    const big = b.length === 4 && Math.abs((b[2] - b[0]) * (b[3] - b[1])) >= area * 0.5;
-    if (!big && !covers(b, box)) continue;
-    const s = readMeasure(vp.get("Measure"));
-    if (s) found = s;
+    if (isPageScale(vp, box)) found = readMeasure(vp.get("Measure"));
   }
   return found;
 }
 
 /**
- * Sets (or with null removes) the page scale. Viewports covering the whole page are replaced by Drawset's;
- * smaller ones (detail views drawn at other scales) are kept after it, so they still win inside their area.
+ * Sets (or with null removes) the page scale. Every viewport readPageScale would take as the page scale is
+ * replaced by Drawset's, so the new scale is the one read back; smaller ones (detail views drawn at other scales) are kept after it, so they still win inside their area.
  */
 export function writePageScale(doc: mupdf.PDFDocument, page: mupdf.PDFPage, s: PageScale | null) {
   const pageObj = page.getObject();
@@ -109,7 +112,7 @@ export function writePageScale(doc: mupdf.PDFDocument, page: mupdf.PDFPage, s: P
     for (let i = 0; i < old.length; i++) {
       const vp = old.get(i);
       const d = vp.resolve();
-      if (d.isDictionary() && covers(bboxOf(d), box)) continue;
+      if (isPageScale(d, box)) continue;
       keep.push(vp);
     }
   }

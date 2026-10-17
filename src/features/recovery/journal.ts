@@ -105,6 +105,9 @@ export function stateFromJournal(t: DocTab, j: JournalEntry): DocState {
     void _p;
     const m: Markup = { ...rest, pageId, ...(image ? { image: { ...image, data: unb64(image.data) } } : {}) };
     const orig = fileById.get(m.id);
+    // the annotation number is the file's: a markup the file does not have is new, whatever the journal says
+    if (orig?.objNum !== undefined) m.objNum = orig.objNum;
+    else delete m.objNum;
     markups[m.id] = orig && stable(orig) === stable(m) ? orig : m;
   }
   return {

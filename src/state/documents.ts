@@ -5,7 +5,7 @@ import { askText } from "../app/AskDialog";
 import { dropJournal, sha256Hex } from "../features/recovery/journal";
 import { currentSpec, decorationsFor, specJson } from "../features/headerFooter/hf";
 import { sameScale } from "../markup/measure";
-import { openPdfDialog, rememberRecentName, readPath, saveAs, saveInPlace, setDirty, type OpenedFile } from "../platform/host";
+import { openPdfDialog, rememberRecentName, readPath, saveAs, savePathFor, setDirty, writeSaved, type OpenedFile } from "../platform/host";
 import { renderCache } from "../features/viewer/renderCache";
 import { invalidateApBitmaps } from "../features/viewer/overlay";
 import { forgetContentIndexes } from "../features/viewer/snap";
@@ -37,10 +37,13 @@ export async function openFiles(files: OpenedFile[]) {
       engine()
         .readMarkups(info.docId)
         .then((records) => {
-          const tab = useApp.getState().tabs.find((t) => t.key === key);
-          if (tab) setLoadedMarkups(key, recordsToMarkups(records, tab.state.pages));
+          if (useApp.getState().tabs.some((t) => t.key === key)) setLoadedMarkups(key, records);
         })
-        .catch((e) => flash(`Could not read markups: ${e.message}`, "error"));
+        .catch((e) => {
+          flash(`Could not read markups: ${e.message}`, "error");
+          // the file's annotations are then simply left as they are; the document can still be edited and saved
+          if (useApp.getState().tabs.some((t) => t.key === key)) setLoadedMarkups(key, []);
+        });
     } catch (e) {
       useApp.setState({ busy: null });
       flash(`Could not open ${f.name}: ${(e as Error).message}`, "error");
@@ -303,12 +306,20 @@ export async function ensureRights(key: string, why = "This file's permissions d
 export async function saveTab(key: string, opts: SaveOptions = {}): Promise<boolean> {
   const t = useApp.getState().tabs.find((x) => x.key === key);
   if (!t) return false;
+  if (!t.markupsLoaded) {
+    flash("Still reading this document's markups; save again in a moment.");
+    return false;
+  }
   const blocked = rightsBlock(t, buildPlan(t, t.state, opts));
   if (blocked && !(await ensureRights(key, blocked))) return false;
+  // where it goes is settled first: cancelling the dialog must leave the document exactly as it was
+  const dest = await savePathFor(t.path, t.name);
+  if (dest === undefined) return false;
   try {
     useApp.setState({ busy: "Saving…" });
     const plan = buildPlan(t, t.state, opts);
     const res = await engine().save(t.docId, plan, "incremental");
+    // from here the engine holds the saved revision, so the tab must follow it even if writing the file fails
     renderCache.invalidateDoc(t.docId);
     invalidateApBitmaps(t.docId);
     forgetContentIndexes(t.docId);
@@ -318,15 +329,23 @@ export async function saveTab(key: string, opts: SaveOptions = {}): Promise<bool
     appliedSpec.delete(t.docId);
     appliedOcr.delete(t.docId);
     const fingerprint = await sha256Hex(res.bytes).catch(() => undefined);
-    const path = await saveInPlace(t.path, t.name, res.bytes);
     const pages = pagesFromInfo(res.info);
     const state: DocState = { pages, markups: recordsToMarkups(res.markups, pages) };
+    let error: Error | null = null;
+    try {
+      await writeSaved(dest, t.name, res.bytes);
+    } catch (e) {
+      error = e as Error;
+    }
     updateTab(key, (x) => ({
       ...x,
       info: res.info,
-      path: path ?? x.path,
+      path: error ? x.path : (dest ?? x.path),
+      name: !error && dest ? (dest.split(/[\\/]/).pop() ?? x.name) : x.name,
       state,
-      saved: state,
+      // not written: the changes stay unsaved (a copy of the state is never identical to it), and saving again
+      // writes the engine's revision, which already holds them
+      saved: error ? { ...state } : state,
       undo: [],
       redo: [],
       selection: x.selection.filter((id) => state.markups[id]),
@@ -335,8 +354,12 @@ export async function saveTab(key: string, opts: SaveOptions = {}): Promise<bool
       search: { ...x.search, hits: [], current: -1, done: false },
       textSelection: null,
       fields,
-      fingerprint,
+      fingerprint: error ? x.fingerprint : fingerprint,
     }));
+    if (error) {
+      flash(`Save failed: ${error.message} Your changes are kept; save again or use Save a copy.`, "error");
+      return false;
+    }
     void dropJournal(t);
     flash(opts.flattenForms ? "Form fields flattened and saved." : opts.flatten ? "Markups flattened and saved." : opts.applyRedactions ? "Redactions applied and saved." : `Saved ${t.name}.`);
     return true;

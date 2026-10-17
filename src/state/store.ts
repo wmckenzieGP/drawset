@@ -314,11 +314,25 @@ export function addTab(info: DocInfo, name: string, path: string | null): string
 }
 
 /** Sets the markups read from the file as both current and saved state (no undo entry). */
-export function setLoadedMarkups(key: string, markups: Record<string, Markup>) {
+/**
+ * Adds the file's own markups once they have been read. Changes made before that (a page rotated or deleted,
+ * a markup drawn) are kept, and every undo and redo step gets the file's markups for the pages it has, so
+ * undoing past the load never looks like the file's annotations were deleted. Each markup is one object
+ * everywhere, so unchanged annotations are never rewritten on save.
+ */
+export function setLoadedMarkups(key: string, records: MarkupRecord[]) {
   updateTab(key, (t) => {
-    const state = { ...t.state, markups };
-    const isClean = t.state === t.saved;
-    return { ...t, state, saved: isClean ? state : { ...t.saved, markups }, markupsLoaded: true };
+    const fileMarkups = recordsToMarkups(records, t.saved.pages);
+    const withFile = (s: DocState): DocState => {
+      const ids = new Set(s.pages.map((p) => p.id));
+      const markups: Record<string, Markup> = {};
+      for (const m of Object.values(fileMarkups)) if (ids.has(m.pageId)) markups[m.id] = m;
+      return { ...s, markups: { ...markups, ...s.markups } };
+    };
+    const saved = withFile(t.saved);
+    const state = t.state === t.saved ? saved : withFile(t.state);
+    const step = (u: { label: string; state: DocState }) => ({ ...u, state: u.state === t.saved ? saved : withFile(u.state) });
+    return { ...t, state, saved, undo: t.undo.map(step), redo: t.redo.map(step), markupsLoaded: true };
   });
 }
 
@@ -344,6 +358,8 @@ export function commit(key: string, label: string, fn: (s: DocState) => DocState
 }
 
 export function undo(key: string) {
+  // the next edit starts a new step, even one of the same kind within the coalescing window
+  lastCoalesce = null;
   updateTab(key, (t) => {
     const last = t.undo[t.undo.length - 1];
     if (!last) return t;
@@ -352,6 +368,7 @@ export function undo(key: string) {
 }
 
 export function redo(key: string) {
+  lastCoalesce = null;
   updateTab(key, (t) => {
     const next = t.redo[t.redo.length - 1];
     if (!next) return t;

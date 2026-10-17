@@ -2,7 +2,7 @@
  * Drawset desktop shell. Deliberately thin: windows, file dialogs, reading and writing files,
  * recent files, PDF file association and printing. All PDF work happens in the renderer's worker.
  */
-import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell, type IpcMainInvokeEvent } from "electron";
 import { promises as fs, existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -19,7 +19,16 @@ const MAX_RECENT = 15;
 const recoveryDir = () => path.join(app.getPath("userData"), "recovery");
 const journalPath = (id: string) => path.join(recoveryDir(), `${id.replace(/[^a-zA-Z0-9_-]/g, "_")}.json`);
 
+const APP_ORIGIN = `${APP_SCHEME}://drawset/`;
+
 let mainWindow: BrowserWindow | null = null;
+/**
+ * Files the renderer may write: ones it opened (dialog, recent list, file association, drag and drop) or that
+ * the user chose in a save dialog. Anything else is refused, so a page can never write where it likes.
+ */
+const writable = new Set<string>();
+const key = (p: string) => (process.platform === "win32" ? path.resolve(p).toLowerCase() : path.resolve(p));
+const isPdf = (p: string) => p.toLowerCase().endsWith(".pdf");
 let pendingPaths: string[] = [];
 let dirty = false;
 
@@ -48,7 +57,9 @@ function addRecent(p: string) {
 }
 
 async function readPdf(p: string) {
+  if (!isPdf(p)) throw new Error("Drawset only opens PDF files.");
   const buf = await fs.readFile(p);
+  writable.add(key(p));
   addRecent(p);
   return { path: p, name: path.basename(p), bytes: new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength) };
 }
@@ -84,6 +95,13 @@ function createWindow() {
     if (/^(https?|mailto):/.test(url)) shell.openExternal(url);
     return { action: "deny" };
   });
+  // the window only ever shows Drawset itself: a dropped link or a stray navigation must not load another page
+  // (which would then see the preload's file functions)
+  const stay = (e: Electron.Event, url: string) => {
+    if (!url.startsWith(APP_ORIGIN)) e.preventDefault();
+  };
+  mainWindow.webContents.on("will-navigate", stay);
+  mainWindow.webContents.on("will-redirect", stay);
   mainWindow.webContents.on("before-input-event", (_e, input) => {
     if (input.type === "keyDown" && input.key === "F12") mainWindow?.webContents.toggleDevTools();
   });
@@ -102,6 +120,23 @@ function createWindow() {
     else fs.rm(recoveryDir(), { recursive: true, force: true }).catch(() => undefined);
   });
   mainWindow.on("closed", () => (mainWindow = null));
+}
+
+/** IPC handlers answer only Drawset's own page. */
+function handle(channel: string, fn: (e: IpcMainInvokeEvent, ...args: any[]) => unknown) {
+  ipcMain.handle(channel, (e, ...args) => {
+    if (!e.senderFrame?.url.startsWith(APP_ORIGIN)) throw new Error("Not allowed.");
+    return fn(e, ...args);
+  });
+}
+
+/** `name` in `dir`, or "name (2).pdf" and so on when a file of that name is already there. */
+function freeName(dir: string, name: string): string {
+  const ext = path.extname(name);
+  const stem = name.slice(0, name.length - ext.length);
+  let candidate = path.join(dir, name);
+  for (let i = 2; existsSync(candidate); i++) candidate = path.join(dir, `${stem} (${i})${ext}`);
+  return candidate;
 }
 
 const gotLock = app.requestSingleInstanceLock();
@@ -132,7 +167,7 @@ if (!gotLock) {
       return net.fetch(pathToFileURL(full).toString());
     });
 
-    ipcMain.handle("open-dialog", async () => {
+    handle("open-dialog", async () => {
       if (!mainWindow) return [];
       const res = await dialog.showOpenDialog(mainWindow, {
         title: "Open PDF",
@@ -142,31 +177,53 @@ if (!gotLock) {
       if (res.canceled) return [];
       return Promise.all(res.filePaths.map(readPdf));
     });
-    ipcMain.handle("read-file", (_e, p: string) => readPdf(p));
-    ipcMain.handle("save-file", async (_e, p: string, bytes: Uint8Array) => {
+    handle("read-file", (_e, p: string) => readPdf(p));
+    handle("save-file", async (_e, p: string, bytes: Uint8Array) => {
+      if (!isPdf(p) || !writable.has(key(p))) throw new Error("Drawset can only save over a file it opened or one you chose.");
       await writeAtomic(p, bytes);
       addRecent(p);
       return true;
     });
-    ipcMain.handle("save-dialog", async (_e, suggested: string) => {
+    handle("save-dialog", async (_e, suggested: string) => {
       if (!mainWindow) return null;
       const res = await dialog.showSaveDialog(mainWindow, {
         title: "Save a copy",
         defaultPath: suggested,
         filters: [{ name: "PDF documents", extensions: ["pdf"] }],
       });
-      return res.canceled || !res.filePath ? null : res.filePath;
+      if (res.canceled || !res.filePath) return null;
+      writable.add(key(res.filePath));
+      return res.filePath;
     });
-    ipcMain.handle("save-file-as", async (_e, suggested: string, bytes: Uint8Array, filterName: string, ext: string) => {
+    handle("save-files-in-folder", async (_e, suggestedDir: string | null, files: { name: string; bytes: Uint8Array }[]) => {
+      if (!mainWindow) return null;
+      const res = await dialog.showOpenDialog(mainWindow, {
+        title: `Choose a folder for ${files.length} files`,
+        defaultPath: suggestedDir ?? undefined,
+        properties: ["openDirectory", "createDirectory"],
+      });
+      if (res.canceled || !res.filePaths[0]) return null;
+      const dir = res.filePaths[0];
+      const written: string[] = [];
+      // never replace a file that is already there
+      for (const f of files) {
+        const target = freeName(dir, path.basename(f.name));
+        await writeAtomic(target, f.bytes);
+        written.push(target);
+      }
+      return written;
+    });
+    handle("save-file-as", async (_e, suggested: string, bytes: Uint8Array, filterName: string, ext: string) => {
       if (!mainWindow) return null;
       const res = await dialog.showSaveDialog(mainWindow, { defaultPath: suggested, filters: [{ name: filterName, extensions: [ext] }] });
       if (res.canceled || !res.filePath) return null;
       await writeAtomic(res.filePath, bytes);
+      writable.add(key(res.filePath));
       return res.filePath;
     });
-    ipcMain.handle("recent-list", () => readRecent().filter((p) => existsSync(p)));
-    ipcMain.handle("recent-clear", () => writeRecent([]));
-    ipcMain.handle("pending-paths", () => {
+    handle("recent-list", () => readRecent().filter((p) => existsSync(p)));
+    handle("recent-clear", () => writeRecent([]));
+    handle("pending-paths", () => {
       const p = pendingPaths;
       pendingPaths = [];
       return p;
@@ -174,18 +231,18 @@ if (!gotLock) {
     ipcMain.on("set-dirty", (_e, value: boolean) => {
       dirty = value;
     });
-    ipcMain.handle("app-version", () => app.getVersion());
-    ipcMain.handle("journal-write", async (_e, id: string, json: string) => {
+    handle("app-version", () => app.getVersion());
+    handle("journal-write", async (_e, id: string, json: string) => {
       await fs.mkdir(recoveryDir(), { recursive: true });
       await writeAtomic(journalPath(id), new TextEncoder().encode(json));
     });
-    ipcMain.handle("journal-list", async () => {
+    handle("journal-list", async () => {
       const names = await fs.readdir(recoveryDir()).catch(() => [] as string[]);
       const out: string[] = [];
       for (const n of names) if (n.endsWith(".json")) out.push(await fs.readFile(path.join(recoveryDir(), n), "utf8").catch(() => ""));
       return out.filter(Boolean);
     });
-    ipcMain.handle("journal-remove", (_e, id: string) => fs.rm(journalPath(id), { force: true }));
+    handle("journal-remove", (_e, id: string) => fs.rm(journalPath(id), { force: true }));
 
     createWindow();
   });

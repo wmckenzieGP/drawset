@@ -13,6 +13,8 @@ interface DesktopHost {
   readFile(p: string): Promise<{ path: string; name: string; bytes: Uint8Array }>;
   saveFile(p: string, bytes: Uint8Array): Promise<boolean>;
   saveDialog(suggested: string): Promise<string | null>;
+  saveFilesInFolder(suggestedDir: string | null, files: { name: string; bytes: Uint8Array }[]): Promise<string[] | null>;
+  pathForFile(f: File): string;
   saveFileAs(suggested: string, bytes: Uint8Array, filterName: string, ext: string): Promise<string | null>;
   recentList(): Promise<string[]>;
   recentClear(): Promise<void>;
@@ -55,8 +57,10 @@ function pickFiles(accept: string, multiple: boolean): Promise<File[]> {
 }
 
 export async function fileToOpened(f: File): Promise<OpenedFile> {
-  const withPath = f as File & { path?: string };
-  return { path: withPath.path || null, name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) };
+  // a file dropped from Explorer has a path on the desktop: open it through the shell so it can be saved in place
+  const p = desktop ? desktop.pathForFile(f) : "";
+  if (desktop && p && /\.pdf$/i.test(p)) return desktop.readFile(p);
+  return { path: null, name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) };
 }
 
 export async function openPdfDialog(): Promise<OpenedFile[]> {
@@ -87,15 +91,35 @@ function download(bytes: Uint8Array, name: string, mime: string) {
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
-/** Saves over the original file. In the browser this downloads the file instead. */
-export async function saveInPlace(path: string | null, name: string, bytes: Uint8Array): Promise<string | null> {
-  if (desktop && path) {
-    await desktop.saveFile(path, bytes);
-    return path;
+/**
+ * Where a save will go, asked before anything is written: the file's own path, or (on the desktop, for a file
+ * without one) a path chosen in a dialog. Returns undefined when the user cancels; null in the browser, which
+ * downloads instead.
+ */
+export async function savePathFor(path: string | null, name: string): Promise<string | null | undefined> {
+  if (!desktop) return null;
+  if (path) return path;
+  return (await desktop.saveDialog(name)) ?? undefined;
+}
+
+/** Writes the bytes to a path from savePathFor (null downloads them in the browser). */
+export async function writeSaved(path: string | null, name: string, bytes: Uint8Array): Promise<void> {
+  if (desktop && path) await desktop.saveFile(path, bytes);
+  else download(bytes, name, "application/pdf");
+}
+
+/**
+ * Saves several new files. The desktop app asks for a folder once and never replaces a file already there;
+ * the browser downloads each. Returns the number written, or null when cancelled.
+ */
+export async function saveMany(nearPath: string | null, files: { name: string; bytes: Uint8Array }[]): Promise<number | null> {
+  if (desktop) {
+    const dir = nearPath ? nearPath.replace(/[\\/][^\\/]*$/, "") : null;
+    const written = await desktop.saveFilesInFolder(dir, files);
+    return written ? written.length : null;
   }
-  if (desktop) return saveAs(name, bytes);
-  download(bytes, name, "application/pdf");
-  return null;
+  for (const f of files) download(f.bytes, f.name, "application/pdf");
+  return files.length;
 }
 
 /** Asks where to save and writes there. Returns the chosen path (null in the browser or if cancelled). */

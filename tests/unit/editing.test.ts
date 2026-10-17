@@ -102,4 +102,16 @@ describe("editing commands", () => {
     undo(key);
     expect(tab().state.markups[m.id].style.opacity).toBe(m.style.opacity);
   });
+
+  it("a change straight after undo is its own step, not merged into the one before", () => {
+    const m = Object.values(tab().state.markups)[0];
+    const set = (o: number) => commit(key, "Opacity", (s) => withMarkups(s, [{ ...s.markups[m.id], style: { ...s.markups[m.id].style, opacity: o } }]), `opacity:${m.id}`);
+    const before = tab().state;
+    set(0.5);
+    undo(key);
+    set(0.3);
+    expect(tab().undo[tab().undo.length - 1].state).toBe(before);
+    undo(key);
+    expect(tab().state).toBe(before);
+  });
 });
