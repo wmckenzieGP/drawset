@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { create } from "zustand";
 import type { HFPosition } from "../../engine/types";
@@ -25,6 +25,16 @@ export function HeaderFooterDialog() {
   const [spec, setSpec] = useState<HFSpec>(defaultSpec);
   const [wmOn, setWmOn] = useState(false);
   const lastInput = useRef<{ el: HTMLInputElement; pos: HFPosition | "wm" } | null>(null);
+  // where the caret goes once the inserted variable is in the box (set before the next paint, so typing can never get ahead of it)
+  const caret = useRef<{ el: HTMLInputElement; at: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const c = caret.current;
+    if (!c) return;
+    caret.current = null;
+    c.el.focus();
+    c.el.setSelectionRange(c.at, c.at);
+  });
 
   useEffect(() => {
     if (!open || !tab) return;
@@ -51,10 +61,7 @@ export function HeaderFooterDialog() {
     const v = el.value.slice(0, at) + token + el.value.slice(el.selectionEnd ?? at);
     if (pos === "wm") setWm({ text: v });
     else setSpec((s) => ({ ...s, text: { ...s.text, [pos]: v } }));
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(at + token.length, at + token.length);
-    });
+    caret.current = { el, at: at + token.length };
   };
 
   const apply = () => {
