@@ -38,7 +38,7 @@ type DragState =
   | { t: "idle" }
   | { t: "pan"; sx: number; sy: number; left: number; top: number; button: number }
   | { t: "marquee"; page: PageLayout; a: Pt; b: Pt; additive: boolean }
-  | { t: "move"; page: PageLayout; start: Pt; last: Pt; originals: Markup[]; moved: boolean }
+  | { t: "move"; page: PageLayout; start: Pt; last: Pt; originals: Markup[]; moved: boolean; at?: Pt }
   | { t: "resize"; page: PageLayout; original: Markup; handle: Handle; frame: Rect; current: Markup }
   | { t: "vertex"; page: PageLayout; original: Markup; index: number; current: Markup }
   | { t: "box"; kind: MarkupKind | "zoom" | "labelregion"; page: PageLayout; a: Pt; b: Pt; moved: boolean }
@@ -268,12 +268,18 @@ export class Controller {
           return;
         }
       }
-      if (!page) {
+      let target = page;
+      let hit = page ? this.hitAt(tab, page, this.toPage(page, c)) : null;
+      if (!hit) {
+        // a markup lying off its own page (moved there by an older version, or by another editor) can still be picked
+        const stray = this.strayHit(tab, c);
+        if (stray) [target, hit] = [stray.page, stray.hit];
+      }
+      if (!target) {
         this.setSelection([]);
         return;
       }
-      const p = this.toPage(page, c);
-      const hit = this.hitAt(tab, page, p);
+      const p = this.toPage(target, c);
       // a plain click follows a link; Shift or Ctrl selects it (or use the Link tool to move and resize links)
       if (hit?.kind === "link" && hit.link && !e.shiftKey && !e.ctrlKey && !e.metaKey && !tab.selection.includes(hit.id)) {
         void followLink(tab, hit.link);
@@ -290,12 +296,12 @@ export class Controller {
           sel = [hit.id];
           this.setSelection(sel);
         }
-        const originals = sel.map((id) => tab.state.markups[id]).filter((m) => m && !m.locked && m.pageId === page.entry.id);
-        this.drag = { t: "move", page, start: p, last: p, originals, moved: false };
+        const originals = sel.map((id) => tab.state.markups[id]).filter((m) => m && !m.locked && m.pageId === target.entry.id);
+        this.drag = { t: "move", page: target, start: p, last: p, originals, moved: false };
         return;
       }
-      if (!e.shiftKey && !e.ctrlKey && tab.fields?.length && clickField(tab, page.entry.src, p)) return;
-      this.drag = { t: "marquee", page, a: p, b: p, additive: e.shiftKey || e.ctrlKey };
+      if (!e.shiftKey && !e.ctrlKey && tab.fields?.length && clickField(tab, target.entry.src, p)) return;
+      this.drag = { t: "marquee", page: target, a: p, b: p, additive: e.shiftKey || e.ctrlKey };
       if (!this.drag.additive) this.setSelection([]);
       return;
     }
@@ -345,6 +351,34 @@ export class Controller {
     return null;
   }
 
+  /** A markup outside its own page's box under the pointer, on a page near the pointer. */
+  private strayHit(tab: DocTab, c: Pt): { page: PageLayout; hit: Markup } | null {
+    const pages = this.host.layout().pages;
+    const near = pages.filter((pl) => c[1] >= pl.y - pl.h && c[1] <= pl.y + 2 * pl.h);
+    for (const pl of near) {
+      const hit = this.hitAt(tab, pl, this.toPage(pl, c));
+      if (hit) return { page: pl, hit };
+    }
+    return null;
+  }
+
+  /**
+   * Where moved markups land. Dropped on another page, they go onto that page at the same spot on screen;
+   * otherwise they are kept on their own page, never left hanging off its edge where nothing could select them.
+   */
+  private placeMoved(from: PageLayout, at: Pt | null, ms: Markup[]): Markup[] {
+    const target = at ? pageAt(this.host.layout(), at[0], at[1]) : null;
+    if (target && target.entry.id !== from.entry.id && ms.every((m) => !m.quads.length)) {
+      // the group's centre goes where it was dropped; page units are the same on every page
+      const b = ms.map(markupBounds).reduce((a, r) => [Math.min(a[0], r[0]), Math.min(a[1], r[1]), Math.max(a[2], r[2]), Math.max(a[3], r[3])]);
+      const centre: Pt = [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2];
+      const onScreen = apply(from.m, centre);
+      const there = this.toPage(target, [onScreen[0] + from.x, onScreen[1] + from.y]);
+      return keepOnPage(target, ms.map((m) => ({ ...translate(m, there[0] - centre[0], there[1] - centre[1]), pageId: target.entry.id })));
+    }
+    return keepOnPage(from, ms);
+  }
+
   pointerMove(e: PointerEvent) {
     const d = this.drag;
     const el = this.host.scrollEl();
@@ -371,6 +405,7 @@ export class Controller {
         d.b = p;
         break;
       case "move":
+        d.at = c;
         d.last = e.shiftKey ? snapAngle(d.start, p) : p;
         if (!d.moved && dist(d.start, d.last) > this.tol(d.page, 3)) d.moved = true;
         break;
@@ -498,9 +533,8 @@ export class Controller {
       }
       case "move":
         if (d.moved && d.originals.length) {
-          const dx = d.last[0] - d.start[0];
-          const dy = d.last[1] - d.start[1];
-          commit(tab.key, d.originals.length > 1 ? "Move markups" : "Move markup", (s) => withMarkups(s, d.originals.map((m) => translate(m, dx, dy))));
+          const moved = this.placeMoved(d.page, d.at ?? null, d.originals.map((m) => translate(m, d.last[0] - d.start[0], d.last[1] - d.start[1])));
+          commit(tab.key, d.originals.length > 1 ? "Move markups" : "Move markup", (s) => withMarkups(s, moved));
         }
         break;
       case "resize":
@@ -666,3 +700,14 @@ export class Controller {
 
 
 export { withDerivedRect };
+
+/** Shifts markups (as a group) just enough that they lie within the page. */
+export function keepOnPage(page: PageLayout, ms: Markup[]): Markup[] {
+  if (!ms.length) return ms;
+  const pb = page.entry.info.bounds;
+  const b = ms.map(markupBounds).reduce((a, r) => [Math.min(a[0], r[0]), Math.min(a[1], r[1]), Math.max(a[2], r[2]), Math.max(a[3], r[3])]);
+  const shift = (lo: number, hi: number, plo: number, phi: number) => (hi - lo > phi - plo ? plo - lo : lo < plo ? plo - lo : hi > phi ? phi - hi : 0);
+  const dx = shift(b[0], b[2], pb[0], pb[2]);
+  const dy = shift(b[1], b[3], pb[1], pb[3]);
+  return dx || dy ? ms.map((m) => translate(m, dx, dy)) : ms;
+}

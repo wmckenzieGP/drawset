@@ -7,6 +7,10 @@ import { addTab, commit, isDirty, setLoadedMarkups, undo, useApp, withMarkups, t
 import { saveTab } from "../../src/state/documents";
 import { deletePages } from "../../src/features/pages/pageOps";
 import { openMupdf } from "./helpers/mupdf";
+import { keepOnPage } from "../../src/features/viewer/controller";
+import { computeLayout } from "../../src/features/viewer/layout";
+import { markupBounds } from "../../src/markup/appearance";
+import { translate } from "../../src/markup/edit";
 
 const host = vi.hoisted(() => ({ dest: undefined as string | null | undefined, write: null as null | ((b: Uint8Array) => void) }));
 vi.mock("../../src/platform/host", async (orig) => ({
@@ -88,5 +92,37 @@ describe("document state", () => {
     expect(isDirty(tabOf(key))).toBe(false);
     const page = openMupdf(written!).loadPage(0);
     expect(page.getAnnotations().some((a) => a.getContents() === "Keep me")).toBe(true);
+  });
+
+  it("a markup moved onto another page is saved there once, with nothing left behind", async () => {
+    const info = core.open(read("annotated.pdf"), "annotated.pdf");
+    const key = addTab(info, "annotated.pdf", null);
+    setLoadedMarkups(key, core.readMarkups(info.docId));
+    const [p0, p1] = tabOf(key).state.pages;
+    const m = Object.values(tabOf(key).state.markups).find((x) => x.pageId === p0.id && x.objNum !== undefined && !x.quads.length && x.kind !== "link")!;
+    const onFirst = core.readMarkups(info.docId).filter((r) => r.pageIndex === 0).length;
+    commit(key, "Move", (s) => withMarkups(s, [{ ...m, pageId: p1.id, contents: "Moved over" }]));
+    host.dest = null;
+    let written: Uint8Array | null = null;
+    host.write = (b) => void (written = b);
+    expect(await saveTab(key)).toBe(true);
+    const doc = openMupdf(written!);
+    expect(doc.loadPage(0).getAnnotations().length).toBeLessThan(onFirst);
+    expect(doc.loadPage(0).getAnnotations().some((a) => a.getContents() === m.contents && m.contents !== "")).toBe(false);
+    expect(doc.loadPage(1).getAnnotations().filter((a) => a.getContents() === "Moved over").length).toBe(1);
+  });
+
+  it("markups dragged past the page edge are kept on the page", () => {
+    const info = core.open(read("annotated.pdf"), "annotated.pdf");
+    const key = addTab(info, "annotated.pdf", null);
+    const layout = computeLayout(tabOf(key).state.pages, 1, 0, 1000);
+    const page = layout.pages[0];
+    const b = page.entry.info.bounds;
+    const box = mk("textbox", { pageId: page.entry.id, rect: [100, 100, 200, 140], points: [] });
+    const [out] = keepOnPage(page, [translate(box, 0, b[3] + 500)]);
+    const r = markupBounds(out);
+    expect(r[3]).toBeLessThanOrEqual(b[3] + 1e-6);
+    expect(r[1]).toBeGreaterThanOrEqual(b[1]);
+    expect(r[0]).toBe(markupBounds(box)[0]);
   });
 });

@@ -228,14 +228,24 @@ export interface SaveOptions {
 export function buildPlan(t: DocTab, state: DocState = t.state, opts: SaveOptions & { pageIds?: string[] } = {}): SavePlan {
   const pages = opts.pageIds ? opts.pageIds.map((id) => state.pages.find((p) => p.id === id)).filter((p): p is DocState["pages"][number] => !!p) : state.pages;
   const physOf = new Map(state.pages.map((p) => [p.id, p.src]));
+  const savedPhysOf = new Map(t.saved.pages.map((p) => [p.id, p.src]));
   const upserts: SavePlan["upserts"] = [];
+  const deletes: number[] = [];
   for (const m of Object.values(state.markups)) {
-    if (t.saved.markups[m.id] === m && m.objNum !== undefined) continue;
+    const was = t.saved.markups[m.id];
+    if (was === m && m.objNum !== undefined) continue;
     const page = physOf.get(m.pageId);
     if (page === undefined) continue;
+    if (was?.objNum !== undefined && m.objNum !== undefined && savedPhysOf.get(was.pageId) !== page) {
+      // moved to another page: the annotation (and its replies) is removed there and written afresh here
+      deletes.push(was.objNum);
+      const { objNum: _o, ...fresh } = m;
+      void _o;
+      upserts.push({ markup: { ...fresh, replies: fresh.replies.map(({ objNum: _r, ...r }) => (void _r, r)) }, page });
+      continue;
+    }
     upserts.push({ markup: m, page });
   }
-  const deletes: number[] = [];
   for (const m of Object.values(t.saved.markups)) {
     if (!state.markups[m.id] && m.objNum !== undefined) deletes.push(m.objNum);
   }
