@@ -1,101 +1,56 @@
-import { useState } from "react";
-import { activeTab, setSnap, setView, useApp } from "../state/store";
-import { goBack, goForward, jumpTo } from "../features/links/navigate";
-import { Icon } from "./icons";
+import { activeTab, setSnap, useApp } from "../state/store";
 import { openSecurity, securitySummary } from "../features/security/SecurityDialog";
-import { clampScale } from "../features/viewer/Viewer";
+import { useCursor } from "../features/viewer/controller";
+import { scaleLabel } from "../markup/measure";
+import { keysOf } from "./keymap";
 
-/** Finds a page by number ("12") or by label ("M-012"); returns the page index or -1. */
-export function findPage(input: string, labels: string[]): number {
-  const q = input.trim();
-  if (!q) return -1;
-  const exact = labels.findIndex((l) => l === q);
-  if (exact >= 0) return exact;
-  const ci = labels.findIndex((l) => l.toLowerCase() === q.toLowerCase());
-  if (ci >= 0) return ci;
-  if (/^\d+$/.test(q)) {
-    const n = parseInt(q, 10);
-    if (n >= 1 && n <= labels.length) return n - 1;
-  }
-  return -1;
+
+const ISO = [["A0", 841, 1189], ["A1", 594, 841], ["A2", 420, 594], ["A3", 297, 420], ["A4", 210, 297], ["B1", 707, 1000], ["B2", 500, 707]] as const;
+const mm = (pt: number) => (pt * 25.4) / 72;
+
+/** "A1 841 × 594 mm", or just the size when it is not a standard sheet. */
+export function sheetSize(wPt: number, hPt: number): string {
+  const w = mm(wPt);
+  const h = mm(hPt);
+  const [a, b] = [Math.min(w, h), Math.max(w, h)];
+  const iso = ISO.find(([, x, y]) => Math.abs(a - x) < 2 && Math.abs(b - y) < 2);
+  return `${iso ? `${iso[0]} ` : ""}${Math.round(w)} × ${Math.round(h)} mm`;
 }
 
+function Toggle({ on, onClick, label, title, id }: { on: boolean; onClick: () => void; label: string; title: string; id: string }) {
+  return (
+    <button className={on ? "on" : ""} aria-pressed={on} onClick={onClick} title={title} data-testid={id}>
+      {label}
+    </button>
+  );
+}
+
+/** Along the bottom: snapping, reuse and split sync on the left; the page's size, scale and the pointer on the right. */
 export function StatusBar() {
   const tab = useApp(activeTab);
   const author = useApp((s) => s.author);
   const snap = useApp((s) => s.snap);
-  const [goto, setGoto] = useState<string | null>(null);
-  const [zoomText, setZoomText] = useState<string | null>(null);
-  if (!tab) return <div className="statusbar"><span>Ready</span></div>;
-  const labels = tab.state.pages.map((p) => p.label);
-  const n = tab.state.pages.length;
-  const cur = Math.min(tab.currentPage, n - 1);
-  const label = labels[cur] ?? "";
-  const zoom = Math.round(tab.view.scale * (72 / 96) * 100 * 10) / 10;
-  const markupCount = Object.keys(tab.state.markups).length;
+  const reuse = useApp((s) => s.tools.reuse);
+  const split = useApp((s) => s.split);
+  const cursor = useCursor();
+  const page = tab ? tab.state.pages[Math.min(tab.currentPage, tab.state.pages.length - 1)] : undefined;
+  const pointerPage = tab && cursor.pageId ? tab.state.pages.find((p) => p.id === cursor.pageId) : undefined;
+  const sizeOf = (p: NonNullable<typeof page>) => {
+    const b = p.info.bounds;
+    const turned = (p.info.rotate + p.rotation) % 180 !== 0;
+    return turned ? sheetSize(b[3] - b[1], b[2] - b[0]) : sheetSize(b[2] - b[0], b[3] - b[1]);
+  };
+  const markupCount = tab ? Object.keys(tab.state.markups).length : 0;
   return (
     <div className="statusbar">
-      <button className="icon-btn" onClick={() => goBack(tab.key)} disabled={!tab.nav.back.length} title="Previous view (Alt+Left)" data-testid="nav-back">
-        <Icon name="back" size={14} />
-      </button>
-      <button className="icon-btn" onClick={() => goForward(tab.key)} disabled={!tab.nav.fwd.length} title="Next view (Alt+Right)" data-testid="nav-forward">
-        <Icon name="forward" size={14} />
-      </button>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          const idx = findPage(goto ?? "", labels);
-          if (idx >= 0) jumpTo(tab.key, idx);
-          else useApp.setState({ message: { text: `No page "${goto}"`, kind: "error" } });
-          setGoto(null);
-        }}
-      >
-        <label>
-          Page{" "}
-          <input
-            className="goto"
-            data-testid="goto-page"
-            value={goto ?? (label === String(cur + 1) ? label : label)}
-            onFocus={(e) => {
-              setGoto(e.target.value);
-              e.target.select();
-            }}
-            onBlur={() => setGoto(null)}
-            onChange={(e) => setGoto(e.target.value)}
-            aria-label="Go to page number or label"
-          />
-        </label>{" "}
-        <span className="muted" data-testid="page-position">
-          ({cur + 1} of {n})
-        </span>
-      </form>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          const v = parseFloat(zoomText ?? "");
-          if (v > 0) setView(tab.key, { scale: clampScale((v / 100) * (96 / 72)) });
-          setZoomText(null);
-        }}
-      >
-        <label>
-          Zoom{" "}
-          <input className="zoom" data-testid="zoom" value={zoomText ?? `${zoom}%`} onFocus={(e) => { setZoomText(String(zoom)); e.target.select(); }} onBlur={() => setZoomText(null)} onChange={(e) => setZoomText(e.target.value)} aria-label="Zoom percentage" />
-        </label>
-      </form>
-      <span className="muted">{tab.view.rotation ? `View rotated ${tab.view.rotation}°` : ""}</span>
-      <span className="spacer" />
-      <span className="snap-toggles" title="Snapping (hold Alt to draw without snapping)">
-        <span className="muted">Snap</span>
-        <button className={snap.markups ? "on" : ""} aria-pressed={snap.markups} onClick={() => setSnap({ markups: !snap.markups })} data-testid="snap-markups">
-          Markups
-        </button>
-        <button className={snap.content ? "on" : ""} aria-pressed={snap.content} onClick={() => setSnap({ content: !snap.content })} data-testid="snap-content">
-          Drawing
-        </button>
-        <button className={snap.grid ? "on" : ""} aria-pressed={snap.grid} onClick={() => setSnap({ grid: !snap.grid })} data-testid="snap-grid">
-          Grid
-        </button>
-        {snap.grid && (
+      <span className="snap-toggles" title="Hold Alt while drawing to turn snapping off">
+        <Toggle on={snap.showGrid} onClick={() => setSnap({ showGrid: !snap.showGrid })} label="Grid" title={`Show grid (${keysOf("view.showGrid")})`} id="show-grid" />
+        <Toggle on={snap.grid} onClick={() => setSnap({ grid: !snap.grid })} label="Snap" title={`Snap to grid (${keysOf("view.snapGrid")})`} id="snap-grid" />
+        <Toggle on={snap.content} onClick={() => setSnap({ content: !snap.content })} label="Content" title={`Snap to content: line ends and intersections in the drawing (${keysOf("view.snapContent")})`} id="snap-content" />
+        <Toggle on={snap.markups} onClick={() => setSnap({ markups: !snap.markups })} label="Markup" title={`Snap to markup points (${keysOf("view.snapMarkup")})`} id="snap-markups" />
+        <Toggle on={reuse} onClick={() => useApp.setState((s) => ({ tools: { ...s.tools, reuse: !s.tools.reuse } }))} label="Reuse" title="Keep the drawing tool after each markup" id="status-reuse" />
+        <Toggle on={!!split?.sync} onClick={() => split && useApp.setState({ split: { ...split, sync: !split.sync } })} label="Sync" title="Split view panes follow each other" id="status-sync" />
+        {(snap.grid || snap.showGrid) && (
           <select value={snap.gridMm} onChange={(e) => setSnap({ gridMm: Number(e.target.value) })} aria-label="Grid spacing" data-testid="snap-grid-size">
             {[1, 2, 2.5, 5, 10, 20, 25, 50].map((v) => (
               <option key={v} value={v}>
@@ -105,13 +60,32 @@ export function StatusBar() {
           </select>
         )}
       </span>
-      {(tab.info.security.encrypted || tab.state.security) && (
+      <span className="spacer" />
+      {tab && (tab.info.security.encrypted || tab.state.security) && (
         <button className="secured" onClick={openSecurity} title={securitySummary(tab)} data-testid="security-status">
           {tab.state.security === "none" ? "Unsecured on save" : tab.state.security ? "Secured on save" : tab.info.security.owner ? "Secured" : "Restricted"}
         </button>
       )}
-      <span className="muted" data-testid="markup-count">{tab.markupsLoaded ? `${markupCount} markup${markupCount === 1 ? "" : "s"}` : "Reading markups…"}</span>
+      {tab && (
+        <span className="muted" data-testid="markup-count">
+          {tab.markupsLoaded ? `${markupCount} markup${markupCount === 1 ? "" : "s"}` : "Reading markups…"}
+        </span>
+      )}
       <span className="muted">Author: {author}</span>
+      {tab?.view.rotation ? <span className="muted">View rotated {tab.view.rotation}°</span> : null}
+      {page && (
+        <span className="muted" data-testid="page-size">
+          {sizeOf(page)}
+        </span>
+      )}
+      {page && (
+        <span className="muted" data-testid="page-scale-status">
+          {page.scale ? scaleLabel(page.scale) : "No scale"}
+        </span>
+      )}
+      <span className="muted coords" data-testid="cursor">
+        {pointerPage && cursor.pt ? `${mm(cursor.pt[0] - pointerPage.info.bounds[0]).toFixed(1)}, ${mm(cursor.pt[1] - pointerPage.info.bounds[1]).toFixed(1)} mm` : ""}
+      </span>
     </div>
   );
 }

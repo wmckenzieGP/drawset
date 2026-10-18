@@ -6,7 +6,7 @@
 import { bboxOf, dist, inflate, signedArea, type Pt, type Quad, type Rect } from "./geometry";
 import { FONT_WIDTHS } from "./fontMetrics";
 import type { FontFamily, LineEnd, Markup, RGB } from "./model";
-import { measureValue } from "./measure";
+import { arcThrough, dimensionLine, measureValue } from "./measure";
 
 export type Seg = ["M", number, number] | ["L", number, number] | ["C", number, number, number, number, number, number] | ["Z"];
 
@@ -459,12 +459,13 @@ function measureOps(m: Markup): DrawOp[] {
       ops.push(captionOp(m, pathMidpoint(pts), text));
       return ops;
     case "area":
+    case "volume":
     case "perimeter": {
       if (pts.length < 2) return ops;
       const segs = polySegs(pts, true);
-      const holes = m.kind === "area" ? (m.measure?.cutouts ?? []).filter((c) => c.length > 2) : [];
+      const holes = m.kind !== "perimeter" ? (m.measure?.cutouts ?? []).filter((c) => c.length > 2) : [];
       for (const h of holes) segs.push(...polySegs(h, true));
-      ops.push({ t: "path", segs, fill: m.kind === "area" ? s.fill : null, stroke, width: s.width, dash: s.dash, join: 1, evenOdd: true });
+      ops.push({ t: "path", segs, fill: m.kind !== "perimeter" ? s.fill : null, stroke, width: s.width, dash: s.dash, join: 1, evenOdd: true });
       if (pts.length > 2) ops.push(captionOp(m, polygonCentroid(pts), text, false));
       return ops;
     }
@@ -473,6 +474,40 @@ function measureOps(m: Markup): DrawOp[] {
       const fill = s.fill ?? s.color ?? [0.9, 0.1, 0.1];
       for (const p of pts) ops.push({ t: "path", segs: ellipseSegs([p[0] - r, p[1] - r, p[0] + r, p[1] + r]), fill, stroke: stroke ?? fill, width: Math.min(s.width, 1), dash: null });
       if (pts.length) ops.push(captionOp(m, [pts[pts.length - 1][0] + r + textWidth(s.fontFamily, s.fontSize, text) / 2 + 2, pts[pts.length - 1][1]], text, false));
+      return ops;
+    }
+    case "dimension": {
+      if (pts.length < 2) return ops;
+      const { a, b, a2, b2, offset, normal } = dimensionLine(pts);
+      // extension lines leave a small gap at the measured points and run a little past the dimension line
+      const gap = Math.sign(offset) * Math.min(2, Math.abs(offset));
+      const over = Math.sign(offset || 1) * 3;
+      const ext = (p: Pt, q: Pt): Seg[] => [["M", p[0] + normal[0] * gap, p[1] + normal[1] * gap], ["L", q[0] + normal[0] * over, q[1] + normal[1] * over]];
+      if (stroke) {
+        if (Math.abs(offset) > 2) ops.push({ t: "path", segs: [...ext(a, a2), ...ext(b, b2)], fill: null, stroke, width: Math.max(0.25, s.width * 0.6), dash: null });
+        ops.push({ t: "path", segs: polySegs([a2, b2], false), fill: null, stroke, width: s.width, dash: s.dash });
+        ops.push(...lineEndOps(s.lineStart, a2, b2, s.width, stroke, s.fill ?? stroke));
+        ops.push(...lineEndOps(s.lineEnd, b2, a2, s.width, stroke, s.fill ?? stroke));
+      }
+      // the value sits on the outer side of the dimension line
+      const mid: Pt = [(a2[0] + b2[0]) / 2, (a2[1] + b2[1]) / 2];
+      const up = offset < 0 || (offset === 0 && normal[1] < 0);
+      ops.push(captionOp(m, mid, text, up));
+      return ops;
+    }
+    case "radius":
+    case "diameter": {
+      if (pts.length < 2) return ops;
+      const [c, e] = pts;
+      const r = dist(c, e);
+      const from: Pt = m.kind === "diameter" ? [2 * c[0] - e[0], 2 * c[1] - e[1]] : c;
+      if (stroke) {
+        ops.push({ t: "path", segs: ellipseSegs([c[0] - r, c[1] - r, c[0] + r, c[1] + r]), fill: s.fill, stroke, width: s.width, dash: s.dash });
+        ops.push({ t: "path", segs: polySegs([from, e], false), fill: null, stroke, width: Math.max(0.25, s.width * 0.75), dash: null });
+        ops.push(...lineEndOps("ClosedArrow", e, from, Math.max(0.5, s.width * 0.75), stroke, stroke));
+        if (m.kind === "diameter") ops.push(...lineEndOps("ClosedArrow", from, e, Math.max(0.5, s.width * 0.75), stroke, stroke));
+      }
+      ops.push(captionOp(m, [(from[0] + e[0]) / 2, (from[1] + e[1]) / 2], text));
       return ops;
     }
     case "angle": {
@@ -541,8 +576,9 @@ export function buildAppearance(m: Markup): Appearance {
       break;
     case "line":
     case "arrow":
-    case "polyline": {
-      const pts = m.points;
+    case "polyline":
+    case "arc": {
+      const pts = m.kind === "arc" ? arcPoints(m) : m.points;
       if (pts.length >= 2 && stroke) {
         ops.push({ t: "path", segs: polySegs(pts, false), fill: null, stroke, width: s.width, dash: s.dash, join: 1 });
         ops.push(...lineEndOps(s.lineStart, pts[0], pts[1], s.width, stroke, s.fill));
@@ -588,6 +624,7 @@ export function buildAppearance(m: Markup): Appearance {
       if (!m.keepAppearance) ops.push({ t: "image", rect: m.rect });
       break;
     case "area":
+    case "volume":
       // multiply lets the drawing show through a solid, pale fill while lines and caption stay crisp
       blend = "Multiply";
       ops.push(...measureOps(m));
@@ -597,6 +634,9 @@ export function buildAppearance(m: Markup): Appearance {
     case "perimeter":
     case "count":
     case "angle":
+    case "dimension":
+    case "radius":
+    case "diameter":
       ops.push(...measureOps(m));
       break;
     case "redact":
@@ -647,4 +687,9 @@ function opsBounds(ops: DrawOp[], m: Markup): Rect {
 export function markupBounds(m: Markup): Rect {
   if (m.kind === "foreign" || m.keepAppearance) return m.rect;
   return buildAppearance(m).bbox;
+}
+
+/** The drawn path of an arc: start, a point on the arc, end (a line while only two points exist). */
+export function arcPoints(m: Markup): Pt[] {
+  return m.points.length >= 3 ? arcThrough(m.points[0], m.points[1], m.points[2]) : m.points;
 }

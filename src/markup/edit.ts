@@ -1,5 +1,6 @@
 /** Pure editing operations on markups: move, scale, vertex edits and hit-testing. */
-import { buildAppearance, calloutLeader, markupBounds, textWidth } from "./appearance";
+import { arcPoints, buildAppearance, calloutLeader, markupBounds, textWidth } from "./appearance";
+import { dimensionLine } from "./measure";
 import { bboxOf, dist, distToSegment, inflate, pointInPolygon, type Pt, type Quad, type Rect } from "./geometry";
 import { BOX_KINDS, nowIso, type Markup } from "./model";
 
@@ -72,6 +73,11 @@ export function vertexHandles(m: Markup): Pt[] {
     case "perimeter":
     case "count":
     case "angle":
+    case "arc":
+    case "dimension":
+    case "volume":
+    case "radius":
+    case "diameter":
       return m.points;
     default:
       return [];
@@ -79,7 +85,7 @@ export function vertexHandles(m: Markup): Pt[] {
 }
 
 export function canResize(m: Markup): boolean {
-  return !["line", "arrow", "polyline", "polygon", "cloud", "highlight", "underline", "strikeout", "note", "length", "polylength", "area", "perimeter", "count", "angle"].includes(m.kind);
+  return !["line", "arrow", "polyline", "polygon", "cloud", "highlight", "underline", "strikeout", "note", "length", "polylength", "area", "perimeter", "count", "angle", "arc", "dimension", "volume", "radius", "diameter"].includes(m.kind);
 }
 
 /** Hit test in page space with tolerance `tol` (points). */
@@ -92,8 +98,9 @@ export function hitTest(m: Markup, p: Pt, tol: number): boolean {
     case "count":
       return m.points.some((q) => dist(q, p) <= Math.max(4, m.style.fontSize * 0.45) + tol) || pointInRect(p, captionBounds(m));
     case "area":
+    case "volume":
     case "perimeter":
-      if ((m.kind === "area" && m.style.fill) || pointInPolygon(p, m.points)) return true;
+      if ((m.kind !== "perimeter" && m.style.fill) || pointInPolygon(p, m.points)) return true;
       for (let i = 0; i < m.points.length; i++) if (distToSegment(p, m.points[i], m.points[(i + 1) % m.points.length]) <= w) return true;
       return false;
     case "length":
@@ -102,6 +109,23 @@ export function hitTest(m: Markup, p: Pt, tol: number): boolean {
       if (pointInRect(p, captionBounds(m))) return true;
       for (let i = 1; i < m.points.length; i++) if (distToSegment(p, m.points[i - 1], m.points[i]) <= w) return true;
       return false;
+    case "dimension": {
+      if (pointInRect(p, captionBounds(m)) || m.points.length < 2) return true;
+      const { a, b, a2, b2 } = dimensionLine(m.points);
+      return [[a, a2], [b, b2], [a2, b2]].some(([x, y]) => distToSegment(p, x, y) <= w);
+    }
+    case "radius":
+    case "diameter": {
+      if (pointInRect(p, captionBounds(m)) || m.points.length < 2) return true;
+      const [c, e] = m.points;
+      if (m.style.fill && dist(p, c) <= dist(c, e)) return true;
+      return Math.abs(dist(p, c) - dist(c, e)) <= w || distToSegment(p, m.kind === "diameter" ? [2 * c[0] - e[0], 2 * c[1] - e[1]] : c, e) <= w;
+    }
+    case "arc": {
+      const pts = arcPoints(m);
+      for (let i = 1; i < pts.length; i++) if (distToSegment(p, pts[i - 1], pts[i]) <= w) return true;
+      return false;
+    }
     case "line":
     case "arrow":
     case "polyline":
@@ -169,6 +193,15 @@ function captionBounds(m: Markup): Rect | null {
     return [l.x, l.y - op.size, l.x + textWidth(op.font, op.size, l.s), l.y + op.size * 0.3];
   }
   return null;
+}
+
+/** Copies of grouped markups form their own group: `copies[i]` is the copy of `originals[i]`. */
+export function relinkGroups(originals: Markup[], copies: Markup[]): Markup[] {
+  const idOf = new Map(originals.map((m, i) => [m.id, copies[i].id]));
+  return copies.map((c, i) => {
+    const g = originals[i].group;
+    return { ...c, group: g ? idOf.get(g) : undefined };
+  });
 }
 
 /** Clone a markup with a fresh id, offset, author and dates (paste/duplicate). */

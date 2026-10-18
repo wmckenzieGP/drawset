@@ -8,7 +8,7 @@ test("label all pages from the title block box, make bookmarks, and save them", 
   await page.goto("/");
   await openFixture(page, "set-200.pdf");
   await waitForPage(page);
-  await page.getByTestId("menu-page").click();
+  await page.getByTestId("menu-document").click();
   await page.getByRole("menuitem", { name: "Label pages from title block…" }).click();
   // A1 landscape: the sheet-number cell is the bottom-right corner of the title block
   const w = 2383.94;

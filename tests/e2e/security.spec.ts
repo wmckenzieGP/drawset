@@ -43,7 +43,7 @@ test("open a protected file, unlock it to save markups, then remove its security
   await expect(page.getByTestId("security-status")).toBeHidden();
 
   // and set new security from the dialog
-  await page.getByTestId("menu-file").click();
+  await page.getByTestId("menu-document").click();
   await page.getByRole("menuitem", { name: "Security…" }).click();
   await page.getByTestId("sec-open").check();
   await page.getByTestId("sec-pw").fill("site-2026");

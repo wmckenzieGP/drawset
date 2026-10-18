@@ -1,22 +1,24 @@
 import { MeasurePanel } from "../features/measure/MeasurePanel";
-import { RedactDialog, openRedactDialog } from "../features/redact/RedactDialog";
+import { RedactDialog } from "../features/redact/RedactDialog";
 import { FormsPanel } from "../features/forms/FormsPanel";
 import { flattenForms } from "../features/forms/forms";
 import { ToolChestPanel, addSelectionToChest } from "../features/toolchest/ToolChestPanel";
 import { AskDialog } from "./AskDialog";
 import { RecoveryDialog } from "../features/recovery/RecoveryDialog";
-import { SecurityDialog, openSecurity } from "../features/security/SecurityDialog";
+import { SecurityDialog } from "../features/security/SecurityDialog";
 import { LinkDialog } from "../features/links/LinkDialog";
-import { goBack, goForward } from "../features/links/navigate";
 import { HeaderFooterDialog, openHeaderFooter } from "../features/headerFooter/HeaderFooterDialog";
-import { OcrDialog, openOcr } from "../features/ocr/OcrDialog";
+import { OcrDialog } from "../features/ocr/OcrDialog";
 import { LabelRegionDialog, startLabelRegion } from "../features/pages/LabelRegionDialog";
 import { bookmarksFromLabels } from "../features/pages/labelRegion";
 import { OverlayDialog, openOverlayDialog } from "../features/overlay/OverlayDialog";
 import { CalibrateDialog, openCalibrateDialog } from "../features/measure/CalibrateDialog";
 import { useEffect, useState } from "react";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { activeTab, commit, isDirty, toggleSplit, useApp, type SplitState, type ToolId } from "../state/store";
+import { activeTab, commit, isDirty, movePanel, PANELS, togglePanel, useApp, type DocTab, type PanelId, type Side, type SplitState } from "../state/store";
+import { COMMANDS, commandById, keysOf } from "./keymap";
+import { ShortcutsDialog } from "./ShortcutsDialog";
+import { NavigationBar } from "./NavigationBar";
 import { closeTab, openFiles, openPath } from "../state/documents";
 import { clearRecent, desktop, fileToOpened, isDesktop, recentFiles } from "../platform/host";
 import { Viewer } from "../features/viewer/Viewer";
@@ -26,14 +28,13 @@ import { SearchPanel } from "../features/search/SearchPanel";
 import { PropertiesPanel } from "../features/properties/PropertiesPanel";
 import { MarkupsList } from "../features/markupsList/MarkupsList";
 import { PageDialogs, openPageDialog } from "../features/pages/PageDialogs";
-import { PrintDialog, openPrintDialog } from "../features/print/PrintDialog";
-import { PreferencesDialog, openPreferences } from "./PreferencesDialog";
+import { PrintDialog } from "../features/print/PrintDialog";
+import { PreferencesDialog } from "./PreferencesDialog";
 import { Toolbar } from "./Toolbar";
 import { StatusBar } from "./StatusBar";
-import { cmd, setTool } from "./commands";
+import { cmd } from "./commands";
 import { Icon } from "./icons";
 import { useShortcuts } from "./shortcuts";
-import { pagesFromSelection, rotatePages, deletePages, insertBlankPage } from "../features/pages/pageOps";
 
 function Item({ label, shortcut, onSelect, disabled }: { label: string; shortcut?: string; onSelect: () => void; disabled?: boolean }) {
   return (
@@ -86,24 +87,27 @@ function RecentMenu() {
   );
 }
 
-const TOOL_MENU: { group: string; tools: [ToolId, string, string?][] }[] = [
-  { group: "Navigate", tools: [["select", "Select", "V"], ["pan", "Pan", "H"], ["zoom", "Marquee zoom", "Z"], ["text", "Select text", "T"]] },
-  { group: "Shapes", tools: [["rectangle", "Rectangle", "R"], ["ellipse", "Ellipse", "E"], ["line", "Line", "L"], ["arrow", "Arrow", "A"], ["polyline", "Polyline", "N"], ["polygon", "Polygon", "P"], ["cloud", "Cloud", "C"]] },
-  { group: "Freehand", tools: [["pen", "Pen", "F"], ["highlighter", "Highlighter", "G"]] },
-  { group: "Text", tools: [["textbox", "Text box", "X"], ["callout", "Callout", "Q"], ["note", "Note", "O"], ["highlight", "Text highlight", "I"], ["underline", "Underline", "U"], ["strikeout", "Strikethrough", "K"], ["link", "Link", "Shift+H"]] },
-  { group: "Stamps", tools: [["stamp", "Stamp", "S"], ["image", "Image"]] },
-  {
-    group: "Measure",
-    tools: [["calibrate", "Calibrate", "Shift+K"], ["length", "Length", "Shift+L"], ["polylength", "Polylength", "Shift+N"], ["area", "Area", "Shift+A"], ["cutout", "Area cutout"], ["perimeter", "Perimeter", "Shift+P"], ["count", "Count", "Shift+C"], ["angle", "Angle", "Shift+G"]],
-  },
-  { group: "Redact", tools: [["erase", "Erase area"], ["redact", "Redact area"]] },
-];
+/** A menu item for a command in the key map: its label and shortcut come from there. */
+function C({ id, label, disabled, checked }: { id: string; label?: string; disabled?: boolean; checked?: boolean }) {
+  const c = commandById.get(id)!;
+  const has = useApp((s) => s.tabs.length > 0);
+  return <Item label={`${checked ? "✓ " : ""}${label ?? c.label}`} shortcut={c.keys[0]?.replace(/Plus$/, "+").replace(/Minus$/, "-")} onSelect={() => void c.run()} disabled={disabled || (c.doc && !has)} />;
+}
+
+const TOOL_GROUPS = ["Select", "Markup", "Measure", "Redact"];
 
 function MenuBar() {
   const tab = useApp(activeTab);
   const has = !!tab;
   const sel = tab ? tab.selection.length : 0;
   const split = useApp((s) => s.split);
+  const snap = useApp((s) => s.snap);
+  const chrome = useApp((s) => s.chrome);
+  const left = useApp((s) => s.leftPanel);
+  const right = useApp((s) => s.rightPanel);
+  const bottom = useApp((s) => s.bottomPanel);
+  const reuse = useApp((s) => s.tools.reuse);
+  const mode = tab?.view.mode;
   return (
     <div className="menubar" role="menubar">
       <div className="brand">
@@ -111,96 +115,163 @@ function MenuBar() {
         Drawset
       </div>
       <TopMenu label="File">
-        <Item label="Open…" shortcut="Ctrl+O" onSelect={cmd.open} />
+        <C id="file.open" />
         <RecentMenu />
         <Sep />
-        <Item label="Save" shortcut="Ctrl+S" onSelect={cmd.save} disabled={!has} />
-        <Item label="Save a copy…" shortcut="Ctrl+Shift+S" onSelect={cmd.saveCopy} disabled={!has} />
+        <C id="file.save" />
+        <C id="file.saveCopy" />
         <Sep />
-        <Item label="Print…" shortcut="Ctrl+P" onSelect={openPrintDialog} disabled={!has} />
-        <Item label="Flatten markups…" onSelect={cmd.flatten} disabled={!has} />
-        <Item label="Security…" onSelect={openSecurity} disabled={!has} />
-        <Item label="Flatten form fields…" onSelect={() => tab && flattenForms(tab)} disabled={!tab?.fields?.length} />
+        <C id="file.print" />
         <Sep />
-        <Item label="Preferences…" onSelect={openPreferences} />
-        <Item label="Close" shortcut="Ctrl+W" onSelect={cmd.close} disabled={!has} />
+        <C id="file.preferences" />
+        <Sep />
+        <C id="file.close" />
+        <C id="file.closeAll" />
       </TopMenu>
       <TopMenu label="Edit">
-        <Item label="Undo" shortcut="Ctrl+Z" onSelect={cmd.undo} disabled={!tab?.undo.length} />
-        <Item label="Redo" shortcut="Ctrl+Y" onSelect={cmd.redo} disabled={!tab?.redo.length} />
+        <C id="edit.undo" disabled={!tab?.undo.length} />
+        <C id="edit.redo" disabled={!tab?.redo.length} />
         <Sep />
-        <Item label="Copy" shortcut="Ctrl+C" onSelect={cmd.copy} disabled={!has} />
-        <Item label="Paste" shortcut="Ctrl+V" onSelect={cmd.paste} disabled={!has} />
-        <Item label="Duplicate" shortcut="Ctrl+D" onSelect={cmd.duplicate} disabled={!sel} />
-        <Item label="Delete" shortcut="Del" onSelect={cmd.deleteSelection} disabled={!sel} />
-        <Item label="Select all on page" shortcut="Ctrl+A" onSelect={cmd.selectAllOnPage} disabled={!has} />
+        <C id="edit.cut" disabled={!sel} />
+        <C id="edit.copy" />
+        <C id="edit.paste" />
+        <C id="edit.pasteInPlace" />
+        <C id="edit.duplicate" disabled={!sel} />
+        <C id="edit.delete" disabled={!sel} />
+        <C id="edit.selectAll" />
         <Sep />
-        <Item label="Lock" shortcut="Ctrl+L" onSelect={() => cmd.setLocked(true)} disabled={!sel} />
-        <Item label="Unlock" shortcut="Ctrl+Shift+L" onSelect={() => cmd.setLocked(false)} disabled={!sel} />
+        <C id="edit.formatPainter" disabled={!sel} />
+        <C id="edit.group" disabled={!sel} />
+        <C id="edit.ungroup" disabled={!sel} />
+        <C id="edit.lock" disabled={!sel} />
+        <C id="edit.autosize" disabled={!sel} />
+        <Menu.Sub>
+          <Menu.SubTrigger className="menu-item" disabled={!sel}>
+            <span>Arrange</span>
+            <span className="menu-shortcut">▸</span>
+          </Menu.SubTrigger>
+          <Menu.Portal>
+            <Menu.SubContent className="menu" sideOffset={4}>
+              <C id="edit.bringToFront" disabled={!sel} />
+              <C id="edit.bringForward" disabled={!sel} />
+              <C id="edit.sendBackward" disabled={!sel} />
+              <C id="edit.sendToBack" disabled={!sel} />
+            </Menu.SubContent>
+          </Menu.Portal>
+        </Menu.Sub>
+        <Menu.Sub>
+          <Menu.SubTrigger className="menu-item" disabled={!sel}>
+            <span>Align and flip</span>
+            <span className="menu-shortcut">▸</span>
+          </Menu.SubTrigger>
+          <Menu.Portal>
+            <Menu.SubContent className="menu" sideOffset={4}>
+              <C id="edit.alignLeft" disabled={!sel} />
+              <C id="edit.alignCentre" disabled={!sel} />
+              <C id="edit.alignRight" disabled={!sel} />
+              <C id="edit.alignTop" disabled={!sel} />
+              <C id="edit.alignMiddle" disabled={!sel} />
+              <C id="edit.alignBottom" disabled={!sel} />
+              <C id="edit.flipHorizontal" disabled={!sel} />
+              <C id="edit.flipVertical" disabled={!sel} />
+            </Menu.SubContent>
+          </Menu.Portal>
+        </Menu.Sub>
         <Sep />
         <Item label="Add to Tool Chest" onSelect={() => tab && addSelectionToChest(tab)} disabled={!sel} />
       </TopMenu>
       <TopMenu label="View">
-        <Item label="Zoom in" shortcut="Ctrl++" onSelect={cmd.zoomIn} disabled={!has} />
-        <Item label="Zoom out" shortcut="Ctrl+-" onSelect={cmd.zoomOut} disabled={!has} />
-        <Item label="Actual size" shortcut="Ctrl+1" onSelect={cmd.actualSize} disabled={!has} />
-        <Item label="Fit page" shortcut="Ctrl+0" onSelect={cmd.fitPage} disabled={!has} />
-        <Item label="Fit width" shortcut="Ctrl+2" onSelect={cmd.fitWidth} disabled={!has} />
+        <C id="view.single" checked={mode === "single"} />
+        <C id="view.continuous" checked={mode === "continuous"} />
+        <C id="view.sideBySide" checked={mode === "sideBySide"} />
+        <C id="view.continuousSideBySide" checked={mode === "continuousSideBySide"} />
         <Sep />
-        <Item label="Previous view" shortcut="Alt+Left" onSelect={() => goBack()} disabled={!tab?.nav.back.length} />
-        <Item label="Next view" shortcut="Alt+Right" onSelect={() => goForward()} disabled={!tab?.nav.fwd.length} />
+        <C id="view.zoomIn" />
+        <C id="view.zoomOut" />
+        <C id="view.actualSize" />
+        <C id="view.fitPage" />
+        <C id="view.fitWidth" />
         <Sep />
-        <Item label="Rotate view clockwise" shortcut="Ctrl+Shift++" onSelect={() => cmd.rotateView(90)} disabled={!has} />
-        <Item label="Rotate view anticlockwise" shortcut="Ctrl+Shift+-" onSelect={() => cmd.rotateView(-90)} disabled={!has} />
+        <C id="view.firstPage" />
+        <C id="view.prevPage" />
+        <C id="view.nextPage" />
+        <C id="view.lastPage" />
+        <C id="view.prevView" disabled={!tab?.nav.back.length} />
+        <C id="view.nextView" disabled={!tab?.nav.fwd.length} />
         <Sep />
-        <Item label="Thumbnails" onSelect={() => useApp.setState((s) => ({ leftPanel: s.leftPanel === "thumbnails" ? null : "thumbnails" }))} />
-        <Item label="Bookmarks" onSelect={() => useApp.setState((s) => ({ leftPanel: s.leftPanel === "bookmarks" ? null : "bookmarks" }))} />
-        <Item label="Search" shortcut="Ctrl+F" onSelect={() => useApp.setState({ leftPanel: "search" })} />
-        <Item label="Tool Chest" onSelect={() => useApp.setState((s) => ({ leftPanel: s.leftPanel === "toolchest" ? null : "toolchest" }))} />
-        <Item label="Form fields" onSelect={() => useApp.setState((s) => ({ leftPanel: s.leftPanel === "forms" ? null : "forms" }))} />
-        <Item label={split ? "Close split view" : "Split view"} onSelect={toggleSplit} disabled={!has} />
+        <C id="view.rotateCw" />
+        <C id="view.rotateCcw" />
+        <Sep />
+        <C id={split ? "view.unsplit" : "view.split"} />
+        <C id="view.switchPane" disabled={!split} />
         <Item label={split?.sync === false ? "Sync split panes" : "Stop syncing split panes"} onSelect={() => split && useApp.setState({ split: { ...split, sync: !split.sync } })} disabled={!split} />
         <Sep />
-        <Item label="Properties" onSelect={() => useApp.setState((s) => ({ rightPanel: !s.rightPanel }))} />
-        <Item label="Markups List" shortcut="Alt+L" onSelect={() => useApp.setState((s) => ({ bottomPanel: !s.bottomPanel }))} />
+        <C id="view.showGrid" checked={snap.showGrid} />
+        <C id="view.snapGrid" checked={snap.grid} />
+        <C id="view.snapContent" checked={snap.content} />
+        <C id="view.snapMarkup" checked={snap.markups} />
+        <Sep />
+        <C id="view.search" />
+        <C id="view.nextResult" />
+        <C id="view.prevResult" />
       </TopMenu>
-      <TopMenu label="Tools">
-        {TOOL_MENU.map((g, i) => (
-          <div key={g.group}>
-            {i > 0 && <Sep />}
-            <div className="menu-label">{g.group}</div>
-            {g.tools.map(([id, label, key]) => (
-              <Item key={id} label={label} shortcut={key} onSelect={() => setTool(id)} disabled={!has} />
-            ))}
-          </div>
-        ))}
-        <Item label="Review and apply redactions…" onSelect={openRedactDialog} disabled={!has} />
+      <TopMenu label="Document">
+        <C id="doc.rotateCw" />
+        <C id="doc.rotateCcw" />
+        <C id="doc.deletePages" />
         <Sep />
-        <Item label="Overlay pages…" onSelect={openOverlayDialog} disabled={!has} />
-        <Item label="Compare documents…" onSelect={openOverlayDialog} disabled={!has} />
-        <Sep />
-        <Item label="Recognise text (OCR)…" onSelect={() => void openOcr()} disabled={!has} />
-        <Sep />
-        <Item label={useApp.getState().tools.reuse ? "Turn reuse mode off" : "Turn reuse mode on"} shortcut="Ctrl+R" onSelect={() => useApp.setState((s) => ({ tools: { ...s.tools, reuse: !s.tools.reuse } }))} />
-      </TopMenu>
-      <TopMenu label="Page">
-        <Item label="Rotate pages clockwise" onSelect={() => tab && rotatePages(tab.key, pagesFromSelection(tab), 90)} disabled={!has} />
-        <Item label="Rotate pages anticlockwise" onSelect={() => tab && rotatePages(tab.key, pagesFromSelection(tab), 270)} disabled={!has} />
-        <Item label="Delete pages" onSelect={() => tab && deletePages(tab.key, pagesFromSelection(tab))} disabled={!has} />
-        <Sep />
-        <Item label="Insert blank page" onSelect={() => tab && insertBlankPage(tab.key)} disabled={!has} />
-        <Item label="Insert pages from file…" onSelect={() => openPageDialog("insert")} disabled={!has} />
+        <C id="doc.insertBlank" />
+        <C id="doc.insertPages" />
         <Item label="Combine files…" onSelect={() => openPageDialog("combine")} disabled={!has} />
         <Sep />
-        <Item label="Extract pages…" onSelect={() => openPageDialog("extract")} disabled={!has} />
+        <C id="doc.extract" />
         <Item label="Split document…" onSelect={() => openPageDialog("split")} disabled={!has} />
         <Sep />
         <Item label="Set page scale…" onSelect={openCalibrateDialog} disabled={!has} />
-        <Sep />
         <Item label="Label pages from title block…" onSelect={startLabelRegion} disabled={!has} />
+        <C id="doc.addBookmark" />
         <Item label="Make bookmarks from page labels" onSelect={() => tab && commit(tab.key, "Make bookmarks", (s) => ({ ...s, outline: bookmarksFromLabels(s) }))} disabled={!has} />
-        <Sep />
         <Item label="Headers, footers and watermark…" onSelect={openHeaderFooter} disabled={!has} />
+        <Sep />
+        <C id="doc.ocr" />
+        <C id="doc.applyRedactions" />
+        <Item label="Overlay pages…" onSelect={openOverlayDialog} disabled={!has} />
+        <Item label="Compare documents…" onSelect={openOverlayDialog} disabled={!has} />
+        <Sep />
+        <C id="doc.flatten" />
+        <Item label="Flatten form fields…" onSelect={() => tab && flattenForms(tab)} disabled={!tab?.fields?.length} />
+        <C id="doc.security" />
+      </TopMenu>
+      <TopMenu label="Tools">
+        {TOOL_GROUPS.map((g, i) => (
+          <div key={g}>
+            {i > 0 && <Sep />}
+            <div className="menu-label">{g}</div>
+            {COMMANDS.filter((c) => c.group === g).map((c) => (
+              <C key={c.id} id={c.id} />
+            ))}
+          </div>
+        ))}
+        <Sep />
+        <Item label={reuse ? "Turn reuse off" : "Turn reuse on"} onSelect={() => useApp.setState((s) => ({ tools: { ...s.tools, reuse: !s.tools.reuse } }))} />
+      </TopMenu>
+      <TopMenu label="Window">
+        {PANELS.filter((p) => p !== "forms" || tab?.info.hasForm || tab?.fields?.length).map((p) => (
+          <C key={p} id={`panel.${p}`} checked={left === p || right === p} />
+        ))}
+        <C id="panel.markups" checked={bottom} />
+        <C id="window.hidePanels" />
+        <Sep />
+        <C id="window.menuBar" checked={chrome.menuBar} />
+        <C id="window.navBar" checked={chrome.navBar} />
+        <C id="window.statusBar" checked={chrome.statusBar} />
+        <C id="window.fullScreen" />
+        <Sep />
+        <C id="window.nextDoc" />
+        <C id="window.prevDoc" />
+      </TopMenu>
+      <TopMenu label="Help">
+        <C id="help.shortcuts" />
       </TopMenu>
     </div>
   );
@@ -281,6 +352,84 @@ function Toast() {
   );
 }
 
+const PANEL_INFO: Record<PanelId, { title: string; icon: string }> = {
+  thumbnails: { title: "Thumbnails", icon: "pages" },
+  bookmarks: { title: "Bookmarks", icon: "bookmark" },
+  search: { title: "Search", icon: "search" },
+  toolchest: { title: "Tool Chest", icon: "chest" },
+  forms: { title: "Form fields", icon: "form" },
+  properties: { title: "Properties", icon: "props" },
+  measurements: { title: "Measurements", icon: "length" },
+};
+
+/**
+ * One side of the window: a bar of panel buttons that is always there, and the open panel next to it.
+ * Right-click a button to move that panel to the other side.
+ */
+function SidePanel({ tab, side }: { tab: DocTab; side: Side }) {
+  const open = useApp((s) => (side === "left" ? s.leftPanel : s.rightPanel));
+  const sides = useApp((s) => s.chrome.side);
+  const [menu, setMenu] = useState<{ id: PanelId; x: number; y: number } | null>(null);
+  // the form fields panel appears for files with a form (and stays while open, e.g. after flattening)
+  const ids = PANELS.filter((p) => sides[p] === side && (p !== "forms" || tab.info.hasForm || !!tab.fields?.length || open === "forms"));
+  if (!ids.length) return null;
+  const shown = open && ids.includes(open) ? open : null;
+  const bar = (
+    <div className="panel-bar" role="tablist" aria-label={`${side === "left" ? "Left" : "Right"} panels`}>
+      {ids.map((p) => (
+        <button
+          key={p}
+          role="tab"
+          aria-selected={shown === p}
+          className={shown === p ? "active" : ""}
+          onClick={() => togglePanel(p)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setMenu({ id: p, x: e.clientX, y: e.clientY });
+          }}
+          title={`${PANEL_INFO[p].title} (${keysOf(`panel.${p}`)})`}
+          data-testid={`panel-${p}`}
+        >
+          <Icon name={PANEL_INFO[p].icon} size={16} />
+        </button>
+      ))}
+    </div>
+  );
+  return (
+    <>
+      {side === "left" && bar}
+      {shown && (
+        <aside className={`panel ${side}`} aria-label={PANEL_INFO[shown].title} data-testid={`side-${side}`}>
+          {shown === "thumbnails" && <ThumbnailsPanel tab={tab} />}
+          {shown === "bookmarks" && <BookmarksPanel tab={tab} />}
+          {shown === "search" && <SearchPanel tab={tab} />}
+          {shown === "toolchest" && <ToolChestPanel tab={tab} />}
+          {shown === "forms" && <FormsPanel tab={tab} />}
+          {shown === "properties" && <PropertiesPanel tab={tab} />}
+          {shown === "measurements" && <MeasurePanel tab={tab} />}
+        </aside>
+      )}
+      {side === "right" && bar}
+      {menu && (
+        <div className="context-backdrop" onPointerDown={() => setMenu(null)}>
+          <div className="menu context" style={{ left: menu.x, top: menu.y }} onPointerDown={(e) => e.stopPropagation()}>
+            <button
+              className="menu-item"
+              onClick={() => {
+                movePanel(menu.id, side === "left" ? "right" : "left");
+                setMenu(null);
+              }}
+              data-testid="panel-move"
+            >
+              Move {PANEL_INFO[menu.id].title} to the {side === "left" ? "right" : "left"}
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function SplitPanes({ split }: { split: SplitState }) {
   const tabs = useApp((s) => s.tabs);
   return (
@@ -300,9 +449,8 @@ function SplitPanes({ split }: { split: SplitState }) {
 
 export function App() {
   const tab = useApp(activeTab);
-  const leftPanel = useApp((s) => s.leftPanel);
-  const rightPanel = useApp((s) => s.rightPanel);
   const bottomPanel = useApp((s) => s.bottomPanel);
+  const chrome = useApp((s) => s.chrome);
   const split = useApp((s) => s.split);
   const [dragOver, setDragOver] = useState(false);
   useShortcuts();
@@ -342,38 +490,19 @@ export function App() {
         await openFiles(await Promise.all(pdfs.map(fileToOpened)));
       }}
     >
-      <MenuBar />
+      {chrome.menuBar && <MenuBar />}
       <Toolbar />
       <Tabs />
       <div className="main">
-        {tab && leftPanel && (
-          <aside className="panel left" aria-label="Side panel">
-            <div className="panel-tabs">
-              {(["thumbnails", "bookmarks", "search", "toolchest", ...(tab.info.hasForm || tab.fields?.length ? (["forms"] as const) : [])] as const).map((p) => (
-                <button key={p} className={leftPanel === p ? "active" : ""} onClick={() => useApp.setState({ leftPanel: p })} title={p === "toolchest" ? "Tool Chest" : p === "forms" ? "Form fields" : p[0].toUpperCase() + p.slice(1)} data-testid={`panel-${p}`}>
-                  <Icon name={p === "thumbnails" ? "pages" : p === "bookmarks" ? "bookmark" : p === "toolchest" ? "chest" : p === "forms" ? "form" : "search"} size={16} />
-                </button>
-              ))}
-            </div>
-            {leftPanel === "thumbnails" && <ThumbnailsPanel tab={tab} />}
-            {leftPanel === "bookmarks" && <BookmarksPanel tab={tab} />}
-            {leftPanel === "search" && <SearchPanel tab={tab} />}
-            {leftPanel === "toolchest" && <ToolChestPanel tab={tab} />}
-            {leftPanel === "forms" && <FormsPanel tab={tab} />}
-          </aside>
-        )}
+        {tab && <SidePanel tab={tab} side="left" />}
         <section className="center">
           {tab && split ? <SplitPanes split={split} /> : tab ? <Viewer key={tab.key} tab={tab} /> : <Welcome />}
+          {tab && chrome.navBar && <NavigationBar tab={tab} />}
           {tab && bottomPanel && <MarkupsList tab={tab} />}
         </section>
-        {tab && rightPanel && (
-          <aside className="panel right" aria-label="Properties">
-            <MeasurePanel tab={tab} />
-            <PropertiesPanel tab={tab} />
-          </aside>
-        )}
+        {tab && <SidePanel tab={tab} side="right" />}
       </div>
-      <StatusBar />
+      {chrome.statusBar && <StatusBar />}
       <Toast />
       <PageDialogs />
       <PrintDialog />
@@ -388,6 +517,7 @@ export function App() {
       <SecurityDialog />
       <RecoveryDialog />
       <PreferencesDialog />
+      <ShortcutsDialog />
       {dragOver && <div className="drop-hint">Drop PDF files to open them</div>}
     </div>
   );

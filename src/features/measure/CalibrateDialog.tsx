@@ -3,13 +3,17 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { create } from "zustand";
 import { dist } from "../../markup/geometry";
 import { convert, IMPERIAL_PRESETS, METRIC_PRESETS, scaleFromPoints, scaleLabel, UNIT_LABELS, UNITS, unitsPerPoint, type PageScale, type Unit } from "../../markup/measure";
-import { activeTab, flash, setPageScale, useApp } from "../../state/store";
+import { activeTab, flash, setPageScale, useApp, showPanel } from "../../state/store";
 import { parsePageRange } from "../pages/pageOps";
 import { useCalibrationPick } from "../viewer/controller";
 import { setTool } from "../../app/commands";
 
 const useDialog = create<{ open: boolean }>(() => ({ open: false }));
-export const openCalibrateDialog = () => activeTab() && useDialog.setState({ open: true });
+export const openCalibrateDialog = () => {
+  if (!activeTab()) return;
+  showPanel("measurements");
+  useDialog.setState({ open: true });
+};
 
 // a calibration pick opens the dialog
 useCalibrationPick.subscribe((s) => {

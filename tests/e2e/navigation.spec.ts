@@ -11,7 +11,6 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("thumbnail, bookmark and page label navigation", async ({ page }) => {
-  await page.getByTestId("panel-thumbnails").click();
   await page.getByTestId("thumb-2").click();
   await expect(page.getByTestId("page-position")).toHaveText("(3 of 200)");
   await page.getByTestId("panel-bookmarks").click();
@@ -50,15 +49,15 @@ test("search finds every planted term", async ({ page }) => {
 test("zoom and fit commands change the scale", async ({ page }) => {
   // a wide, short window so fitting the width and fitting the page differ
   await page.setViewportSize({ width: 1700, height: 650 });
-  await page.keyboard.press("Control+0");
+  await page.keyboard.press("Control+9");
   const zoom = page.getByTestId("zoom");
   await expect.poll(() => zoom.inputValue()).not.toBe("");
   await page.waitForTimeout(200);
   const z0 = await zoom.inputValue();
   await page.keyboard.press("Control+Equal");
   await expect(zoom).not.toHaveValue(z0);
-  await page.keyboard.press("Control+0");
+  await page.keyboard.press("Control+9");
   await expect(zoom).toHaveValue(z0);
-  await page.keyboard.press("Control+2");
+  await page.keyboard.press("Control+0");
   await expect(zoom).not.toHaveValue(z0);
 });

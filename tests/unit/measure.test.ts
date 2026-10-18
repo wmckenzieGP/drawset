@@ -97,7 +97,17 @@ describe("measurements", () => {
       m("perimeter", room),
       m("count", room),
       m("angle", [room[1], room[0], room[3]]),
+      m("dimension", [P(known.horizontal.from), P(known.horizontal.to), [P(known.horizontal.from)[0], P(known.horizontal.from)[1] - 30]]),
+      m("radius", [room[0], room[1]]),
+      m("diameter", [room[0], room[1]]),
+      m("volume", room, { measure: { scale: S100, cutouts: [hole], depth: 2.5 } }),
     ];
+    // a dimension measures between its two points, whatever its offset
+    within(measureValue(ms[6]).value, 10);
+    expect(measureValue(ms[7]).text.startsWith("R ")).toBe(true);
+    within(measureValue(ms[8]).value, 2 * measureValue(ms[7]).value);
+    within(measureValue(ms[9]).value, known.room.netAreaM2 * 2.5);
+    expect(measureValue(ms[9]).unit).toBe("m³");
     const before = ms.map((x) => measureValue(x).value);
     const p = plan(info, ms);
     p.pages[0].scale = S100;
@@ -135,7 +145,9 @@ describe("measurements", () => {
 
     // pdf.js reads the file and the annotations
     const pj = await annotationsPdfjs(res.bytes, 0);
-    expect(pj.filter((a) => ["Line", "PolyLine", "Polygon", "Ink"].includes(a.subtype)).length).toBe(6);
+    expect(pj.filter((a) => ["Line", "PolyLine", "Polygon", "Ink"].includes(a.subtype)).length).toBe(8);
+    expect(pj.filter((a) => a.subtype === "Circle").length).toBe(2);
+    expect(byNm(ms[6].id).get("IT").asName()).toBe("LineDimension");
     const pdoc = await openPdfjs(res.bytes);
     expect(pdoc.numPages).toBe(1);
     await pdoc.destroy();

@@ -31,7 +31,7 @@ export interface ChestSet {
 const COPY_KINDS = new Set<MarkupKind>(["stamp", "image", "textbox", "callout", "note", "count"]);
 
 /** Kinds that can be drawn again (text markups need text under them, redactions are not tools). */
-export const CHEST_KINDS = new Set<MarkupKind>(["rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "pen", "highlighter", "textbox", "callout", "note", "stamp", "image", "length", "polylength", "area", "perimeter", "count", "angle"]);
+export const CHEST_KINDS = new Set<MarkupKind>(["rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "pen", "highlighter", "textbox", "callout", "note", "stamp", "image", "length", "polylength", "area", "perimeter", "count", "angle", "arc", "dimension", "volume", "radius", "diameter"]);
 
 const clonePts = (ps: Pt[]) => ps.map((p) => [p[0], p[1]] as Pt);
 
@@ -50,7 +50,7 @@ export function toolFromMarkup(m: Markup, name?: string): ChestTool {
     stampId: m.stampId,
     stampText: m.stampText ? [...m.stampText] : undefined,
     image: m.image ? { ...m.image, data: m.image.data.slice() } : undefined,
-    measure: m.measure ? { scale: m.measure.scale ? { ...m.measure.scale } : null, cutouts: m.measure.cutouts.map(clonePts) } : undefined,
+    measure: m.measure ? { ...m.measure, scale: m.measure.scale ? { ...m.measure.scale } : null, cutouts: m.measure.cutouts.map(clonePts) } : undefined,
   };
   return { id: newId(), name: name ?? (m.subject || KIND_LABELS[m.kind]), mode: COPY_KINDS.has(m.kind) ? "copy" : "draw", template };
 }
@@ -87,7 +87,7 @@ export function markupFromTool(tool: ChestTool, page: PageEntry, at: Pt, author:
     stampText: t.stampText ? [...t.stampText] : undefined,
     image: t.image ? { ...t.image, data: t.image.data.slice() } : undefined,
     replies: [],
-    measure: t.measure ? { scale: isMeasure(t.kind) ? page.scale : t.measure.scale, cutouts: t.measure.cutouts.map(clonePts) } : undefined,
+    measure: t.measure ? { ...t.measure, scale: isMeasure(t.kind) ? page.scale : t.measure.scale, cutouts: t.measure.cutouts.map(clonePts) } : undefined,
   };
   const c = centre(t);
   return translate(base, at[0] - c[0], at[1] - c[1]);
@@ -182,7 +182,7 @@ export function setFromJson(text: string): ChestSet {
         stampId: t.stampId,
         stampText: Array.isArray(t.stampText) ? t.stampText.map(String) : undefined,
         image,
-        measure: t.measure ? { scale: t.measure.scale ?? null, cutouts: Array.isArray(t.measure.cutouts) ? t.measure.cutouts : [] } : undefined,
+        measure: t.measure ? { scale: t.measure.scale ?? null, cutouts: Array.isArray(t.measure.cutouts) ? t.measure.cutouts : [], ...(typeof t.measure.depth === "number" && t.measure.depth > 0 ? { depth: t.measure.depth } : {}) } : undefined,
       },
     });
   }

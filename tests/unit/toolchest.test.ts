@@ -47,6 +47,11 @@ const CASES: Partial<Record<MarkupKind, Partial<Markup>>> = {
   perimeter: { points: tri, measure: { scale: SCALE, cutouts: [] } },
   count: { points: [[100, 100], [140, 100], [180, 120]], measure: { scale: SCALE, cutouts: [] } },
   angle: { points: [[100, 200], [150, 100], [250, 120]], measure: { scale: SCALE, cutouts: [] } },
+  arc: { points: [[100, 200], [150, 120], [250, 160]] },
+  dimension: { points: [[100, 200], [300, 200], [200, 170]], measure: { scale: SCALE, cutouts: [] } },
+  radius: { points: [[200, 200], [240, 230]], measure: { scale: SCALE, cutouts: [] } },
+  diameter: { points: [[200, 200], [240, 230]], measure: { scale: SCALE, cutouts: [] } },
+  volume: { points: [[100, 100], [300, 100], [300, 300], [100, 300]], measure: { scale: SCALE, cutouts: [], depth: 2.4 } },
 };
 
 const page: PageEntry = { id: "p0", src: 0, info: { index: 0, bounds: [0, 0, 595, 842], rotate: 0, label: "1", ctm: [1, 0, 0, -1, 0, 842], scale: SCALE }, rotation: 0, scale: SCALE, label: "1" };

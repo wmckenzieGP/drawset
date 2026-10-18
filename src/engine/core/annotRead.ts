@@ -97,16 +97,20 @@ function kindFor(subtype: string, obj: mupdf.PDFObject, priv: Record<string, any
     case "Square":
       return "rectangle";
     case "Circle":
+      if ((pk === "radius" || pk === "diameter") && Array.isArray(priv.pts) && priv.pts.length >= 4) return pk;
       return "ellipse";
     case "Line":
-      if (pk === "arrow" || pk === "line" || pk === "length") return pk;
+      if (pk === "arrow" || pk === "line" || pk === "length" || pk === "dimension") return pk;
+      // another editor's dimension: a measured line with leader lines
+      if (it === "LineDimension" && obj.get("LL").isNumber() && Math.abs(obj.get("LL").asNumber()) > 0.01) return "dimension";
       if (it === "LineDimension") return "length";
       return it === "LineArrow" || /Arrow/.test(obj.get("LE").toString()) ? "arrow" : "line";
     case "PolyLine":
       if (pk === "angle" || pk === "polylength") return pk;
+      if (pk === "arc" && Array.isArray(priv.pts) && priv.pts.length >= 6) return "arc";
       return it === "PolyLineDimension" ? "polylength" : "polyline";
     case "Polygon":
-      if (pk === "area" || pk === "perimeter") return pk;
+      if (pk === "area" || pk === "perimeter" || pk === "volume") return pk;
       if (it === "PolygonDimension") return "area";
       return name(dig(obj, "BE", "S")) === "C" || it === "PolygonCloud" ? "cloud" : "polygon";
     case "Ink":
@@ -202,6 +206,7 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
     repliesOf.set(parent, list);
   }
 
+  const idOfNum = new Map(entries.map((e) => [e.num, str(e.obj.get("NM")) || `obj-${e.num}`]));
   const out: MarkupRecord[] = [];
   for (const e of entries) {
     if (childNums.has(e.num)) continue;
@@ -283,11 +288,28 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
       case "length":
         rec.points = pointsFrom(numArray(obj.get("L")), ctm).slice(0, 2);
         break;
+      case "dimension": {
+        // the measured points come from /L, the dimension line's offset from /LL
+        const l = numArray(obj.get("L"));
+        const ll = obj.get("LL").isNumber() ? obj.get("LL").asNumber() : 0;
+        if (l.length < 4) break;
+        const [dx, dy] = [l[2] - l[0], l[3] - l[1]];
+        const len = Math.hypot(dx, dy) || 1;
+        const off = [(l[0] + l[2]) / 2 + (-dy / len) * ll, (l[1] + l[3]) / 2 + (dx / len) * ll];
+        rec.points = pointsFrom([...l.slice(0, 4), ...off], ctm);
+        break;
+      }
+      case "arc":
+      case "radius":
+      case "diameter":
+        rec.points = pointsFrom((priv.pts as unknown[]).map(Number), ctm);
+        break;
       case "polyline":
       case "polygon":
       case "cloud":
       case "polylength":
       case "area":
+      case "volume":
       case "perimeter":
       case "angle":
         rec.points = pointsFrom(numArray(obj.get("Vertices")), ctm);
@@ -343,7 +365,8 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
     }
     if ((kind === "line" || kind === "arrow" || kind === "length") && rec.points.length < 2) rec.kind = "foreign";
     if ((kind === "polyline" || kind === "polygon" || kind === "cloud" || kind === "polylength" || kind === "area" || kind === "perimeter") && rec.points.length < 2) rec.kind = "foreign";
-    if (kind === "angle" && rec.points.length < 3) rec.kind = "foreign";
+    if ((kind === "angle" || kind === "arc" || kind === "dimension" || kind === "volume") && rec.points.length < 3) rec.kind = "foreign";
+    if ((kind === "radius" || kind === "diameter") && rec.points.length < 2) rec.kind = "foreign";
     if (kind === "count" && rec.points.length < 1) rec.kind = "foreign";
     if (isMeasure(rec.kind)) {
       // /Contents holds the value; Drawset recomputes it, and keeps the comment from its private data
@@ -353,9 +376,20 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
       else rec.style.fontSize = 10;
       const cut = Array.isArray(priv.cutouts) ? (priv.cutouts as unknown[]).filter(Array.isArray).map((c) => pointsFrom((c as unknown[]).map(Number), ctm)) : [];
       rec.measure = { scale: readMeasure(obj.get("Measure")) ?? pageScale, cutouts: cut };
+      if (rec.kind === "volume") rec.measure.depth = typeof priv.depth === "number" && priv.depth > 0 ? priv.depth : 1;
     }
     if (rec.kind !== "foreign" && rec.points.length > 0 && kind !== "callout") rec.rect = bboxOf(rec.points);
     if (kind === "pen" || kind === "highlighter") rec.rect = bboxOf(rec.inks.flat());
+    // grouped with another markup: /IRT to it with /RT /Group (followed to the group's first markup)
+    let root = num;
+    for (const seen = new Set<number>(); !seen.has(root); ) {
+      seen.add(root);
+      const o = entries.find((x) => x.num === root)?.obj;
+      const irt = o?.get("IRT");
+      if (!o || !irt?.isIndirect() || name(o.get("RT")) !== "Group" || !idOfNum.has(irt.asIndirect()) || childNums.has(irt.asIndirect())) break;
+      root = irt.asIndirect();
+    }
+    if (root !== num) rec.group = idOfNum.get(root);
     out.push(rec);
   }
   return out;

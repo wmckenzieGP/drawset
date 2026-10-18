@@ -106,6 +106,32 @@ function linkHint(ctx: CanvasRenderingContext2D, m: Markup, devScale: number) {
   ctx.restore();
 }
 
+/** The snapping grid over the visible part of a page, from its top-left corner (thinned out when zoomed out). */
+function drawGrid(ctx: CanvasRenderingContext2D, page: PageLayout, cull: [number, number, number, number], step: number, devScale: number) {
+  const b = page.entry.info.bounds;
+  let s = step;
+  while (s * devScale < 6) s *= 5;
+  const x0 = Math.max(b[0], cull[0]);
+  const x1 = Math.min(b[2], cull[2]);
+  const y0 = Math.max(b[1], cull[1]);
+  const y1 = Math.min(b[3], cull[3]);
+  if (x1 <= x0 || y1 <= y0) return;
+  ctx.save();
+  ctx.strokeStyle = "rgba(90,140,200,0.35)";
+  ctx.lineWidth = 1 / devScale;
+  ctx.beginPath();
+  for (let x = b[0] + Math.ceil((x0 - b[0]) / s) * s; x <= x1; x += s) {
+    ctx.moveTo(x, y0);
+    ctx.lineTo(x, y1);
+  }
+  for (let y = b[1] + Math.ceil((y0 - b[1]) / s) * s; y <= y1; y += s) {
+    ctx.moveTo(x0, y);
+    ctx.lineTo(x1, y);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
 export function drawOverlay(p: OverlayParams) {
   const { normal, multiply, dpr, layout, tab, controller } = p;
   for (const ctx of [normal, multiply]) {
@@ -118,6 +144,7 @@ export function drawOverlay(p: OverlayParams) {
   // links without a border are outlined while the Link tool is in use, or when selected
   const showLinks = useApp.getState().tools.tool === "link";
   const hits = tab.search.hits;
+  const snapPrefs = useApp.getState().snap;
   for (let i = first; i <= last; i++) {
     const page = layout.pages[i];
     const setT = (ctx: CanvasRenderingContext2D) => {
@@ -135,6 +162,7 @@ export function drawOverlay(p: OverlayParams) {
     const c1 = [vis[0] * inv[0] + vis[1] * inv[2] + inv[4], vis[0] * inv[1] + vis[1] * inv[3] + inv[5]];
     const c2 = [vis[2] * inv[0] + vis[3] * inv[2] + inv[4], vis[2] * inv[1] + vis[3] * inv[3] + inv[5]];
     const cull: [number, number, number, number] = [Math.min(c1[0], c2[0]) - 50, Math.min(c1[1], c2[1]) - 50, Math.max(c1[0], c2[0]) + 50, Math.max(c1[1], c2[1]) + 50];
+    if (snapPrefs.showGrid) drawGrid(normal, page, cull, (snapPrefs.gridMm * 72) / 25.4, scale * dpr);
     for (const stored of markupsInRect(tab.state.markups, page.entry.id, cull)) {
       const m = controller.liveMarkup(stored);
       if (m.id === p.editingId && (m.kind === "textbox" || m.kind === "callout")) {
@@ -148,6 +176,7 @@ export function drawOverlay(p: OverlayParams) {
     }
     if (preview && preview.page.entry.id === page.entry.id) {
       const ctx = preview.m.kind === "highlight" || preview.m.kind === "highlighter" || preview.m.kind === "area" ? multiply : normal;
+      for (const x of preview.with ?? []) drawMarkup(normal, tab, page, x, scale * dpr);
       drawMarkup(ctx, tab, page, preview.m, scale * dpr);
       if (preview.m.kind === "link") linkHint(normal, preview.m, scale * dpr);
     }

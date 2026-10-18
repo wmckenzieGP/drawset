@@ -7,13 +7,13 @@ import { textBoxHeight, textPadding } from "../../markup/appearance";
 import { commit, defaultStyleFor, useApp, withMarkups, type DocTab } from "../../state/store";
 import { cmd } from "../../app/commands";
 
-const FILL_KINDS = new Set<MarkupKind>(["rectangle", "ellipse", "polygon", "cloud", "textbox", "callout", "line", "arrow", "polyline", "area", "count"]);
-const WIDTH_KINDS = new Set<MarkupKind>(["link", "rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "pen", "highlighter", "textbox", "callout", "length", "polylength", "area", "perimeter", "angle"]);
-const DASH_KINDS = new Set<MarkupKind>(["link", "rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "textbox", "callout", "length", "polylength", "area", "perimeter", "angle"]);
-const END_KINDS = new Set<MarkupKind>(["line", "arrow", "polyline", "length", "polylength"]);
-const MEASURE_KINDS = new Set<MarkupKind>(["length", "polylength", "area", "perimeter", "count", "angle"]);
+const FILL_KINDS = new Set<MarkupKind>(["rectangle", "ellipse", "polygon", "cloud", "textbox", "callout", "line", "arrow", "polyline", "area", "count", "volume", "radius", "diameter"]);
+const WIDTH_KINDS = new Set<MarkupKind>(["link", "rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "pen", "highlighter", "textbox", "callout", "length", "polylength", "area", "perimeter", "angle", "arc", "dimension", "volume", "radius", "diameter"]);
+const DASH_KINDS = new Set<MarkupKind>(["link", "rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "textbox", "callout", "length", "polylength", "area", "perimeter", "angle", "arc", "dimension", "volume", "radius", "diameter"]);
+const END_KINDS = new Set<MarkupKind>(["line", "arrow", "polyline", "length", "polylength", "arc", "dimension"]);
+const MEASURE_KINDS = new Set<MarkupKind>(["length", "polylength", "area", "perimeter", "count", "angle", "dimension", "volume", "radius", "diameter"]);
 const TEXT_KINDS = new Set<MarkupKind>(["textbox", "callout"]);
-const COLOUR_KINDS = new Set<MarkupKind>(["link", "rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "pen", "highlighter", "textbox", "callout", "note", "highlight", "underline", "strikeout", "stamp", "length", "polylength", "area", "perimeter", "count", "angle"]);
+const COLOUR_KINDS = new Set<MarkupKind>(["link", "rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "pen", "highlighter", "textbox", "callout", "note", "highlight", "underline", "strikeout", "stamp", "length", "polylength", "area", "perimeter", "count", "angle", "arc", "dimension", "volume", "radius", "diameter"]);
 
 const DASHES: { label: string; value: number[] | null }[] = [
   { label: "Solid", value: null },
@@ -178,6 +178,11 @@ export function PropertiesPanel({ tab }: { tab: DocTab }) {
         <div className="panel-title">
           {selected.length === 1 ? KIND_LABELS[first.kind] + (first.kind === "foreign" ? ` (${first.subtype})` : "") : `${selected.length} markups`}
           {selected.some((m) => m.locked) && <span className="badge">Locked</span>}
+          {first.kind !== "foreign" && (
+            <button className="btn small painter-btn" onClick={cmd.formatPainter} title="Format painter: copy this markup's format onto others (Ctrl+Shift+C)" data-testid="format-painter">
+              Format painter
+            </button>
+          )}
         </div>
         {styleKinds.length === kinds.length && !first.keepAppearance && <StyleEditor kinds={styleKinds} style={first.style} onStyle={(patch, tag) => update("Change properties", (m) => fitText({ ...m, style: { ...m.style, ...patch } }), tag)} />}
         <div className="prop-sep" />

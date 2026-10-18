@@ -74,7 +74,7 @@ test("overlay, Tool Chest and replies", async ({ page }) => {
 
   await openFixture(page, "dense-a1.pdf");
   await waitForPage(page);
-  await page.getByTestId("menu-tools").click();
+  await page.getByTestId("menu-document").click();
   await page.getByRole("menuitem", { name: "Overlay pages…" }).click();
   await page.getByTestId("overlay-b-file").selectOption({ label: "calibration.pdf" });
   await page.waitForTimeout(1500);
@@ -89,7 +89,7 @@ test("Tier 3: compare, split view, forms, headers, links, security, OCR", async 
   await waitForPage(page);
   await openFixture(page, "calibration-rev.pdf");
   await waitForPage(page);
-  await page.getByTestId("menu-tools").click();
+  await page.getByTestId("menu-document").click();
   await page.getByRole("menuitem", { name: "Compare documents…" }).click();
   await page.getByTestId("overlay-cloud-all").click();
   await page.waitForTimeout(800);
@@ -115,7 +115,7 @@ test("Tier 3: compare, split view, forms, headers, links, security, OCR", async 
 
   await openFixture(page, "set-200.pdf");
   await waitForPage(page);
-  await page.getByTestId("menu-page").click();
+  await page.getByTestId("menu-document").click();
   await page.getByRole("menuitem", { name: "Headers, footers and watermark…" }).click();
   await page.getByTestId("hf-bc").fill("Sheet {page} of {pages}");
   await page.getByTestId("hf-tr").fill("{label}");
@@ -133,7 +133,7 @@ test("Tier 3: compare, split view, forms, headers, links, security, OCR", async 
   await page.screenshot({ path: "docs/screenshots/link.png" });
   await page.getByTestId("link-ok").click();
 
-  await page.getByTestId("menu-file").click();
+  await page.getByTestId("menu-document").click();
   await page.getByRole("menuitem", { name: "Security…" }).click();
   await page.getByTestId("sec-open").check();
   await page.getByTestId("sec-restrict").check();
@@ -143,7 +143,7 @@ test("Tier 3: compare, split view, forms, headers, links, security, OCR", async 
 
   await openFixture(page, "scanned-text.pdf");
   await waitForPage(page);
-  await page.getByTestId("menu-tools").click();
+  await page.getByTestId("menu-document").click();
   await page.getByRole("menuitem", { name: "Recognise text (OCR)…" }).click();
   await page.getByTestId("ocr-start").click();
   await page.getByTestId("ocr-dialog").waitFor({ state: "hidden", timeout: 90000 });
