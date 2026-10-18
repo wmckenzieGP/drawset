@@ -113,6 +113,8 @@ export type ToolId =
   | "labelregion"
   /** A cloud with a callout leader and text, grouped. */
   | "cloudplus"
+  /** Copies the format of `usePainter`'s source onto clicked markups. */
+  | "painter"
   | MarkupKind;
 
 export interface ToolState {
@@ -314,6 +316,9 @@ function loadAuthor(): string {
     return "Drawset user";
   }
 }
+
+/** The markup whose format the format painter copies. */
+export const usePainter = create<{ source: Markup | null }>(() => ({ source: null }));
 
 export const useApp = create<AppState>(() => ({
   tabs: [],

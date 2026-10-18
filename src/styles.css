@@ -1558,3 +1558,7 @@ input.small {
 .ocr-progress progress {
   width: 100%;
 }
+
+.panel-title .painter-btn {
+  margin-left: auto;
+}

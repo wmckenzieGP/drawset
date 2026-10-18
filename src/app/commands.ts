@@ -1,10 +1,11 @@
 /** Commands shared by menus, toolbar and keyboard shortcuts. */
 import { cloneMarkup, relinkGroups } from "../markup/edit";
+import { aligned, canFlip, flipped, type Alignment } from "../markup/arrange";
 import { textBoxHeight, textPadding, textWidth } from "../markup/appearance";
 import { newId, nowIso, type Markup, type ReviewStatus } from "../markup/model";
 import { closeTab, openWithDialog, saveActive, saveCopyOf, saveTab } from "../state/documents";
 import { chooseImageTool } from "./images";
-import { activeTab, commit, isContinuous, flash, redo, setView, undo, updateTab, useApp, withGroups, withMarkups, showPanel, type PageMode, type PanelId, type Rotation, type ToolId } from "../state/store";
+import { activeTab, commit, isContinuous, flash, redo, setView, undo, updateTab, useApp, usePainter, withGroups, withMarkups, showPanel, type PageMode, type PanelId, type Rotation, type ToolId } from "../state/store";
 import { jumpTo } from "../features/links/navigate";
 import { pageStep, shownFrom } from "../features/viewer/layout";
 import { clampScale } from "../features/viewer/Viewer";
@@ -128,6 +129,34 @@ export const cmd = {
   closeAll: async () => {
     for (const t of [...useApp.getState().tabs]) if (!(await closeTab(t.key))) return;
   },
+  /** Picks up the selected markup's format; the next markup clicked gets it (Ctrl+Shift+C). */
+  formatPainter: () =>
+    withActive(() => {
+      const t = activeTab()!;
+      const src = t.selection.map((id) => t.state.markups[id]).find((m) => m && m.kind !== "foreign");
+      if (!src) return flash("Select the markup whose format you want to copy, then use the format painter.");
+      usePainter.setState({ source: src });
+      useApp.setState((s) => ({ tools: { ...s.tools, tool: "painter", chest: null } }));
+      flash("Click the markups to copy the format to. Esc when done.");
+    }),
+  /** Lines up the selected markups (each group as one) on their page. */
+  align: (how: Alignment) =>
+    withActive((k) => {
+      const t = activeTab()!;
+      const ms = withGroups(t.state.markups, t.selection).map((id) => t.state.markups[id]).filter(Boolean);
+      const moved = aligned(ms, how, (m) => m.group ?? m.id);
+      if (moved.length) commit(k, "Align", (s) => withMarkups(s, moved));
+      else if (new Set(ms.map((m) => m.group ?? m.id)).size < 2) flash("Select two or more markups to align.");
+    }),
+  /** Mirrors the selected shapes and lines across their middle. */
+  flip: (axis: "horizontal" | "vertical") =>
+    withActive((k) => {
+      const t = activeTab()!;
+      const ms = withGroups(t.state.markups, t.selection).map((id) => t.state.markups[id]).filter(Boolean);
+      const out = flipped(ms, axis);
+      if (out.length) commit(k, axis === "horizontal" ? "Flip horizontal" : "Flip vertical", (s) => withMarkups(s, out));
+      else if (ms.length && !ms.some(canFlip)) flash("Text, stamps and images can't be flipped.");
+    }),
   /** Groups the selected markups (Ctrl+G): they are then selected, moved and copied together. */
   group: () =>
     withActive((k) => {

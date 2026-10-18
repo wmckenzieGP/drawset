@@ -314,3 +314,42 @@ test("Cloud+, arc, dimension, radius, diameter and volume tools draw from their 
   const kinds = (saved.loadPage(0) as mupdf.PDFPage).getAnnotations().map((a) => JSON.parse(a.getObject().get("DrawsetData").asString() || "{}").kind);
   expect(kinds.sort()).toEqual(["arc", "callout", "cloud", "diameter", "dimension", "radius", "volume"]);
 });
+
+test("format painter copies a markup's look; Ctrl+Alt keys align and flip", async ({ page }) => {
+  await page.goto("/");
+  await openFixture(page, "calibration.pdf");
+  await waitForPage(page);
+  const at = (x: number, y: number) => pagePoint(page, x, y);
+  await page.keyboard.press("r");
+  await drag(page, await at(0.1, 0.1), await at(0.2, 0.2));
+  await page.keyboard.press("e");
+  await drag(page, await at(0.4, 0.3), await at(0.5, 0.4));
+  const style = () =>
+    page.evaluate(() => {
+      const s = (window as any).__drawset.useApp.getState();
+      const t = s.tabs.find((x: any) => x.key === s.active);
+      return Object.values(t.state.markups).map((m: any) => ({ id: m.id, kind: m.kind, width: m.style.width, color: m.style.color, rect: m.rect }));
+    });
+  // give the rectangle a thick blue line
+  await page.keyboard.press("v");
+  const edge = await at(0.1, 0.15);
+  await page.mouse.click(edge.x, edge.y);
+  await page.locator('[data-testid="properties"] input[type="number"]').first().fill("5");
+  // Ctrl+Shift+C picks up its format; clicking the ellipse paints it
+  await page.mouse.click(edge.x, edge.y);
+  await page.keyboard.press("Control+Shift+C");
+  expect((await state(page)).tool).toBe("painter");
+  const ell = await at(0.4, 0.35);
+  await page.mouse.click(ell.x, ell.y);
+  const s1 = await style();
+  expect(s1.find((m) => m.kind === "ellipse")!.width).toBe(5);
+  expect((await state(page)).tool).toBe("select");
+  // select both and align their left edges; undo puts the ellipse back
+  await page.keyboard.press("Control+a");
+  await page.keyboard.press("Control+Alt+L");
+  const s2 = await style();
+  const [r, e] = [s2.find((m) => m.kind === "rectangle")!, s2.find((m) => m.kind === "ellipse")!];
+  expect(Math.abs(r.rect[0] - e.rect[0])).toBeLessThan(0.01);
+  await page.keyboard.press("Control+z");
+  expect(Math.abs((await style()).find((m) => m.kind === "ellipse")!.rect[0] - e.rect[0])).toBeGreaterThan(10);
+});

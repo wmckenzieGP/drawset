@@ -140,6 +140,7 @@ function MenuBar() {
         <C id="edit.delete" disabled={!sel} />
         <C id="edit.selectAll" />
         <Sep />
+        <C id="edit.formatPainter" disabled={!sel} />
         <C id="edit.group" disabled={!sel} />
         <C id="edit.ungroup" disabled={!sel} />
         <C id="edit.lock" disabled={!sel} />
@@ -155,6 +156,24 @@ function MenuBar() {
               <C id="edit.bringForward" disabled={!sel} />
               <C id="edit.sendBackward" disabled={!sel} />
               <C id="edit.sendToBack" disabled={!sel} />
+            </Menu.SubContent>
+          </Menu.Portal>
+        </Menu.Sub>
+        <Menu.Sub>
+          <Menu.SubTrigger className="menu-item" disabled={!sel}>
+            <span>Align and flip</span>
+            <span className="menu-shortcut">▸</span>
+          </Menu.SubTrigger>
+          <Menu.Portal>
+            <Menu.SubContent className="menu" sideOffset={4}>
+              <C id="edit.alignLeft" disabled={!sel} />
+              <C id="edit.alignCentre" disabled={!sel} />
+              <C id="edit.alignRight" disabled={!sel} />
+              <C id="edit.alignTop" disabled={!sel} />
+              <C id="edit.alignMiddle" disabled={!sel} />
+              <C id="edit.alignBottom" disabled={!sel} />
+              <C id="edit.flipHorizontal" disabled={!sel} />
+              <C id="edit.flipVertical" disabled={!sel} />
             </Menu.SubContent>
           </Menu.Portal>
         </Menu.Sub>

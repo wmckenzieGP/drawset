@@ -6,6 +6,8 @@ import { commandFor, COMMANDS } from "../../src/app/keymap";
 import { computeLayout } from "../../src/features/viewer/layout";
 import { textBoxHeight, textPadding } from "../../src/markup/appearance";
 import { mk } from "./helpers/markups";
+import { aligned, flipped, paintedStyle } from "../../src/markup/arrange";
+import { markupBounds } from "../../src/markup/appearance";
 
 const n = (title: string, children: OutlineNode[] = []): OutlineNode => ({ title, page: 0, children });
 const titles = (l: OutlineNode[]): unknown => l.map((x) => (x.children.length ? [x.title, titles(x.children)] : x.title));
@@ -41,7 +43,8 @@ describe("familiar keys", () => {
     expect(commandFor(key("Equal", { ctrlKey: true, shiftKey: true }))?.id).toBe("view.rotateCw");
     expect(commandFor(key("BracketLeft", { ctrlKey: true }))?.id).toBe("edit.sendBackward");
     expect(commandFor({ ...key("F3"), key: "F3" } as KeyboardEvent)?.id).toBe("view.nextResult");
-    expect(commandFor(key("KeyR", { ctrlKey: true, altKey: true }))).toBeUndefined();
+    expect(commandFor(key("KeyR", { ctrlKey: true, altKey: true }))?.id).toBe("edit.alignRight");
+    expect(commandFor(key("KeyR", { ctrlKey: true, altKey: true, shiftKey: true }))).toBeUndefined();
   });
 });
 
@@ -71,5 +74,47 @@ describe("page layouts", () => {
     expect(c[2].y).toBeGreaterThan(c[0].y);
     // a lone last page sits in the left column
     expect(c[4].x).toBe(c[0].x);
+  });
+});
+
+describe("align, flip and format painter", () => {
+  const a = mk("rectangle", { rect: [100, 100, 150, 150] });
+  const b = mk("rectangle", { rect: [300, 200, 320, 260] });
+  const c = mk("rectangle", { rect: [200, 400, 260, 420], group: undefined });
+  const near = (x: number, y: number) => expect(x).toBeCloseTo(y, 6);
+  it("aligns to the outermost edge or the middle, moving each group as one", () => {
+    const left = aligned([a, b, c], "left");
+    expect(left.map((m) => m.id).sort()).toEqual([b.id, c.id].sort());
+    for (const m of left) near(markupBounds(m)[0], markupBounds(a)[0]);
+    const bottom = aligned([a, b, c], "bottom");
+    for (const m of bottom) near(markupBounds(m)[3], markupBounds(c)[3]);
+    // b and c grouped: they move together, keeping their offset
+    const grouped = aligned([a, b, c], "top", (m) => (m.id === a.id ? "a" : "bc"));
+    expect(grouped.map((m) => m.id).sort()).toEqual([b.id, c.id].sort());
+    const [nb, nc] = [grouped.find((m) => m.id === b.id)!, grouped.find((m) => m.id === c.id)!];
+    near(nc.rect[1] - nb.rect[1], c.rect[1] - b.rect[1]);
+    near(markupBounds(nb)[1], markupBounds(a)[1]);
+  });
+  it("flips across the middle of the selection, leaving text alone", () => {
+    const line = mk("arrow", { points: [[100, 100], [200, 150]], rect: [100, 100, 200, 150] });
+    const [f] = flipped([line], "horizontal");
+    const bx = markupBounds(line);
+    near(f.points[0][0], bx[0] + bx[2] - 100);
+    near(f.points[0][1], 100);
+    expect(flipped([mk("textbox", { contents: "x" })], "vertical")).toEqual([]);
+  });
+  it("paints colour, width and line style; ends and text only where both have them", () => {
+    const src = mk("arrow", { style: { ...mk("arrow").style, color: [0, 0, 1], width: 4, dash: [6, 3], lineEnd: "ClosedArrow" } });
+    const rect = mk("rectangle");
+    const s = paintedStyle(src, rect);
+    expect(s.color).toEqual([0, 0, 1]);
+    expect(s.width).toBe(4);
+    expect(s.dash).toEqual([6, 3]);
+    expect(s.lineEnd).toBe(rect.style.lineEnd);
+    expect(paintedStyle(src, mk("line")).lineEnd).toBe("ClosedArrow");
+    // a borderless text box does not take a shape's outline away
+    const tb = mk("textbox", { style: { ...mk("textbox").style, color: null, fontSize: 18 } });
+    expect(paintedStyle(tb, rect).color).toEqual(rect.style.color);
+    expect(paintedStyle(tb, mk("callout")).fontSize).toBe(18);
   });
 });

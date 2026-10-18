@@ -13,9 +13,10 @@ import { openLinkDialog } from "../links/LinkDialog";
 import { describeTarget, followLink } from "../links/navigate";
 import { canResize, cloneMarkup, hitTest, relinkGroups, scaleBetween, setVertex, translate, vertexHandles, withDerivedRect } from "../../markup/edit";
 import { KIND_LABELS, newId, nowIso, type Markup, type MarkupKind } from "../../markup/model";
-import { commit, flash, updateTab, useApp, withGroups, withMarkups, type DocTab, type ToolId } from "../../state/store";
+import { commit, flash, updateTab, useApp, usePainter, withGroups, withMarkups, type DocTab, type ToolId } from "../../state/store";
 import { boxMarkup, calloutAt, imageAt, inkMarkup, measureAt, noteAt, stampAt, textBoxAt, textMarkup, vertexMarkup } from "./create";
 import { dimensionLine, isMeasure } from "../../markup/measure";
+import { paintedStyle } from "../../markup/arrange";
 import { pageAt, type Layout, type PageLayout } from "./layout";
 import { markupsInRect } from "./markupIndex";
 
@@ -327,6 +328,16 @@ export class Controller {
 
     if (!page) return;
     const raw = this.toPage(page, c);
+    if (tool === "painter") {
+      // the format painter: each click copies the source's format onto the markup clicked
+      const src = usePainter.getState().source;
+      const hit = this.hitAt(tab, page, raw);
+      if (src && hit && hit.id !== src.id && !hit.locked && hit.kind !== "foreign") {
+        commit(tab.key, "Format painter", (s) => withMarkups(s, [{ ...hit, style: paintedStyle(src, hit), modified: nowIso() }]));
+        if (!useApp.getState().tools.reuse) useApp.setState((s) => ({ tools: { ...s.tools, tool: "select" } }));
+      }
+      return;
+    }
     if (tool === "link") {
       // with the Link tool, existing links are selected and moved instead of followed
       const hit = this.hitAt(tab, page, raw);
@@ -518,6 +529,7 @@ export class Controller {
     let title = "";
     if (useInteraction.getState().spaceDown || tool === "pan") cursor = "grab";
     else if (tool === "zoom") cursor = "zoom-in";
+    else if (tool === "painter") cursor = "copy";
     else if (TEXT_TOOLS.has(tool)) cursor = "text";
     else if (tool !== "select") cursor = "crosshair";
     else {

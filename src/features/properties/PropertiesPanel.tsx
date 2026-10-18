@@ -178,6 +178,11 @@ export function PropertiesPanel({ tab }: { tab: DocTab }) {
         <div className="panel-title">
           {selected.length === 1 ? KIND_LABELS[first.kind] + (first.kind === "foreign" ? ` (${first.subtype})` : "") : `${selected.length} markups`}
           {selected.some((m) => m.locked) && <span className="badge">Locked</span>}
+          {first.kind !== "foreign" && (
+            <button className="btn small painter-btn" onClick={cmd.formatPainter} title="Format painter: copy this markup's format onto others (Ctrl+Shift+C)" data-testid="format-painter">
+              Format painter
+            </button>
+          )}
         </div>
         {styleKinds.length === kinds.length && !first.keepAppearance && <StyleEditor kinds={styleKinds} style={first.style} onStyle={(patch, tag) => update("Change properties", (m) => fitText({ ...m, style: { ...m.style, ...patch } }), tag)} />}
         <div className="prop-sep" />
