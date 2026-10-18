@@ -15,7 +15,7 @@ import { canResize, cloneMarkup, hitTest, relinkGroups, scaleBetween, setVertex,
 import { KIND_LABELS, newId, nowIso, type Markup, type MarkupKind } from "../../markup/model";
 import { commit, flash, updateTab, useApp, withGroups, withMarkups, type DocTab, type ToolId } from "../../state/store";
 import { boxMarkup, calloutAt, imageAt, inkMarkup, measureAt, noteAt, stampAt, textBoxAt, textMarkup, vertexMarkup } from "./create";
-import { isMeasure } from "../../markup/measure";
+import { dimensionLine, isMeasure } from "../../markup/measure";
 import { pageAt, type Layout, type PageLayout } from "./layout";
 import { markupsInRect } from "./markupIndex";
 
@@ -44,15 +44,16 @@ type DragState =
   | { t: "move"; page: PageLayout; start: Pt; last: Pt; originals: Markup[]; moved: boolean; at?: Pt; copy?: { toggle: string } }
   | { t: "resize"; page: PageLayout; original: Markup; handle: Handle; frame: Rect; current: Markup }
   | { t: "vertex"; page: PageLayout; original: Markup; index: number; current: Markup }
-  | { t: "box"; kind: MarkupKind | "zoom" | "labelregion"; page: PageLayout; a: Pt; b: Pt; moved: boolean }
-  | { t: "line"; kind: "line" | "arrow" | "length" | "calibrate"; page: PageLayout; a: Pt; b: Pt }
-  | { t: "callout"; page: PageLayout; tip: Pt; b: Pt }
+  | { t: "box"; kind: MarkupKind | "zoom" | "labelregion" | "cloudplus"; page: PageLayout; a: Pt; b: Pt; moved: boolean }
+  | { t: "line"; kind: "line" | "arrow" | "length" | "calibrate" | "radius" | "diameter"; page: PageLayout; a: Pt; b: Pt }
+  /** `plus`: the cloud a Cloud+ callout belongs to; the text is placed with a click after the cloud is drawn. */
+  | { t: "callout"; page: PageLayout; tip: Pt; b: Pt; plus?: Markup }
   | { t: "ink"; kind: "pen" | "highlighter"; page: PageLayout; pts: Pt[] }
   | { t: "poly"; kind: PolyKind; page: PageLayout; pts: Pt[]; cursor: Pt; downAt: Pt | null }
   | { t: "textsel"; kind: "text" | "highlight" | "underline" | "strikeout"; page: PageLayout; a: Pt; b: Pt; quads: Quad[]; text: string; seq: number };
 
-type PolyKind = "polyline" | "polygon" | "cloud" | "polylength" | "area" | "perimeter" | "count" | "angle" | "cutout";
-const POLY_TOOLS = new Set<ToolId>(["polyline", "polygon", "cloud", "polylength", "area", "perimeter", "count", "angle", "cutout"]);
+type PolyKind = "polyline" | "polygon" | "cloud" | "polylength" | "area" | "perimeter" | "count" | "angle" | "cutout" | "arc" | "dimension" | "volume";
+const POLY_TOOLS = new Set<ToolId>(["arc", "dimension", "volume", "polyline", "polygon", "cloud", "polylength", "area", "perimeter", "count", "angle", "cutout"]);
 
 /** Where calibration picks go: the dialog listens. */
 /** The title-block region drawn for labelling pages, waiting for the dialog. */
@@ -61,8 +62,8 @@ export const useLabelRegionPick = create<{ pick: { pageId: string; rect: Rect } 
 export const useCalibrationPick = create<{ pick: { pageId: string; a: Pt; b: Pt } | null }>(() => ({ pick: null }));
 
 /** Tools whose points snap. Freehand, text and zoom tools do not. */
-const SNAP_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "textbox", "callout", "note", "stamp", "image", "length", "polylength", "area", "perimeter", "count", "angle", "calibrate", "cutout", "redact", "erase", "chest", "link"]);
-const BOX_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "textbox", "stamp", "image", "zoom", "redact", "erase", "labelregion", "link"]);
+const SNAP_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "textbox", "callout", "note", "stamp", "image", "length", "polylength", "area", "perimeter", "count", "angle", "calibrate", "cutout", "redact", "erase", "chest", "link", "cloudplus", "arc", "dimension", "volume", "radius", "diameter"]);
+const BOX_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "textbox", "stamp", "image", "zoom", "redact", "erase", "labelregion", "link", "cloudplus"]);
 const TEXT_TOOLS = new Set<ToolId>(["text", "highlight", "underline", "strikeout"]);
 
 export class Controller {
@@ -166,7 +167,7 @@ export class Controller {
   }
 
   /** In-progress markup to draw as a preview. */
-  preview(): { page: PageLayout; m: Markup } | null {
+  preview(): { page: PageLayout; m: Markup; with?: Markup[] } | null {
     const d = this.drag;
     switch (d.t) {
       case "move":
@@ -180,18 +181,18 @@ export class Controller {
           return m ? { page: d.page, m } : null;
         }
         if (d.kind === "textbox") return { page: d.page, m: textBoxAt(d.page.entry.id, d.a, d.b) };
-        if (d.kind === "cloud") {
+        if (d.kind === "cloud" || d.kind === "cloudplus") {
           const r = normRect([d.a[0], d.a[1], d.b[0], d.b[1]]);
           return { page: d.page, m: vertexMarkup("cloud", d.page.entry.id, rectPoints(r)) };
         }
         return { page: d.page, m: boxMarkup(d.kind, d.page.entry.id, d.a, d.b) };
       }
       case "line":
-        if (d.kind === "length") return { page: d.page, m: measureAt("length", d.page.entry, [d.a, d.b]) };
+        if (d.kind === "length" || d.kind === "radius" || d.kind === "diameter") return { page: d.page, m: measureAt(d.kind, d.page.entry, [d.a, d.b]) };
         if (d.kind === "calibrate") return { page: d.page, m: { ...vertexMarkup("line", d.page.entry.id, [d.a, d.b]), style: { ...vertexMarkup("line", d.page.entry.id, [d.a, d.b]).style, color: [1, 0.3, 0], lineStart: "Butt", lineEnd: "Butt", dash: [4, 3] } } };
         return { page: d.page, m: vertexMarkup(d.kind, d.page.entry.id, [d.a, d.b]) };
       case "callout":
-        return { page: d.page, m: calloutAt(d.page.entry.id, d.tip, d.b) };
+        return { page: d.page, m: calloutAt(d.page.entry.id, d.tip, d.b), with: d.plus ? [d.plus] : undefined };
       case "ink":
         return { page: d.page, m: inkMarkup(d.kind, d.page.entry.id, d.pts) };
       case "poly": {
@@ -221,11 +222,11 @@ export class Controller {
 
   // ---------- creating ----------
 
-  private finishCreate(m: Markup, label?: string, edit = true) {
+  private finishCreate(m: Markup, label?: string, edit = true, others: Markup[] = []) {
     const tab = this.host.tab();
     if (!tab) return;
-    commit(tab.key, `Add ${label ?? KIND_LABELS[m.kind]}`, (s) => withMarkups(s, [m]));
-    this.setSelection([m.id]);
+    commit(tab.key, `Add ${label ?? KIND_LABELS[m.kind]}`, (s) => withMarkups(s, [...others, m]));
+    this.setSelection([...others.map((x) => x.id), m.id]);
     if (edit && (m.kind === "textbox" || m.kind === "callout")) useInteraction.setState({ editingId: m.id });
     if (!useApp.getState().tools.reuse) useApp.setState((s) => ({ tools: { ...s.tools, tool: "select", chest: null } }));
   }
@@ -245,6 +246,8 @@ export class Controller {
     }
     if (e.button !== 0) return;
     if (useInteraction.getState().editingId) return;
+    // placing a Cloud+ text: the click's release places it
+    if (this.drag.t === "callout" && this.drag.plus) return;
     const page = pageAt(this.host.layout(), c[0], c[1]);
 
     if (this.drag.t === "poly") {
@@ -256,7 +259,8 @@ export class Controller {
         this.drag.pts.push(p);
         this.drag.cursor = p;
         this.drag.downAt = p;
-        if (this.drag.kind === "angle" && this.drag.pts.length >= 3) {
+        // three-click tools finish on the third click
+        if ((this.drag.kind === "angle" || this.drag.kind === "arc" || this.drag.kind === "dimension") && this.drag.pts.length >= 3) {
           this.finishPoly();
           return;
         }
@@ -334,8 +338,8 @@ export class Controller {
     }
     const p = SNAP_TOOLS.has(tool) ? this.snapAt(page, raw, e) : raw;
     if (BOX_TOOLS.has(tool)) {
-      this.drag = { t: "box", kind: tool as MarkupKind | "zoom" | "labelregion", page, a: p, b: p, moved: false };
-    } else if (tool === "line" || tool === "arrow" || tool === "length" || tool === "calibrate") {
+      this.drag = { t: "box", kind: tool as MarkupKind | "zoom" | "labelregion" | "cloudplus", page, a: p, b: p, moved: false };
+    } else if (tool === "line" || tool === "arrow" || tool === "length" || tool === "calibrate" || tool === "radius" || tool === "diameter") {
       this.drag = { t: "line", kind: tool, page, a: p, b: p };
     } else if (tool === "callout") {
       this.drag = { t: "callout", page, tip: p, b: p };
@@ -467,6 +471,8 @@ export class Controller {
         break;
       case "callout":
         d.b = e.shiftKey ? snapAngle(d.tip, p) : this.snapAt(d.page, p, e);
+        // a Cloud+ leader starts on the cloud's edge nearest the text
+        if (d.plus) d.tip = nearestOnOutline(d.plus.points, d.b);
         break;
       case "ink": {
         const last = d.pts[d.pts.length - 1];
@@ -604,6 +610,13 @@ export class Controller {
           break;
         }
         if (!d.moved) break;
+        if (d.kind === "cloudplus") {
+          // now place the text: the leader follows the pointer until the next click
+          const cloud = vertexMarkup("cloud", pid, rectPoints(normRect([d.a[0], d.a[1], d.b[0], d.b[1]])));
+          const at: Pt = [Math.max(d.a[0], d.b[0]) + 30, Math.min(d.a[1], d.b[1]) - 30];
+          this.drag = { t: "callout", page: d.page, tip: nearestOnOutline(cloud.points, at), b: at, plus: cloud };
+          break;
+        }
         if (d.kind === "cloud") this.finishCreate(vertexMarkup("cloud", pid, rectPoints(normRect([d.a[0], d.a[1], d.b[0], d.b[1]]))));
         else this.finishCreate(boxMarkup(d.kind, pid, d.a, d.b));
         break;
@@ -611,12 +624,15 @@ export class Controller {
       case "line":
         if (dist(d.a, d.b) <= this.tol(d.page, 3)) break;
         if (d.kind === "calibrate") useCalibrationPick.setState({ pick: { pageId: d.page.entry.id, a: d.a, b: d.b } });
-        else if (d.kind === "length") this.finishCreate(measureAt("length", d.page.entry, [d.a, d.b]));
+        else if (d.kind === "length" || d.kind === "radius" || d.kind === "diameter") this.finishCreate(measureAt(d.kind, d.page.entry, [d.a, d.b]));
         else this.finishCreate(vertexMarkup(d.kind, d.page.entry.id, [d.a, d.b]));
         break;
-      case "callout":
-        this.finishCreate(calloutAt(d.page.entry.id, d.tip, dist(d.tip, d.b) > this.tol(d.page, 6) ? d.b : [d.tip[0] + 40, d.tip[1] - 40]));
+      case "callout": {
+        const callout = calloutAt(d.page.entry.id, d.tip, dist(d.tip, d.b) > this.tol(d.page, 6) ? d.b : [d.tip[0] + 40, d.tip[1] - 40]);
+        if (d.plus) this.finishCreate({ ...callout, group: d.plus.id }, "Cloud+", true, [d.plus]);
+        else this.finishCreate(callout);
         break;
+      }
       case "ink":
         if (d.pts.length > 1) this.finishCreate(inkMarkup(d.kind, d.page.entry.id, d.pts));
         break;
@@ -672,6 +688,11 @@ export class Controller {
     // a double-click adds the last point twice
     const pts = d.pts.filter((p, i) => i === 0 || dist(p, d.pts[i - 1]) > this.tol(d.page, 2));
     const min = d.kind === "polyline" || d.kind === "polylength" ? 2 : d.kind === "count" ? 1 : 3;
+    // a dimension finished early (Enter) sits just off the line
+    if (d.kind === "dimension" && pts.length === 2 && dist(pts[0], pts[1]) > 0) {
+      const { normal } = dimensionLine(pts);
+      pts.push([(pts[0][0] + pts[1][0]) / 2 - normal[0] * 12, (pts[0][1] + pts[1][1]) / 2 - normal[1] * 12]);
+    }
     if (pts.length >= min) {
       if (d.kind === "cutout") this.addCutout(d.page.entry.id, pts);
       else if (isMeasure(d.kind)) this.finishCreate(measureAt(d.kind, d.page.entry, pts));
@@ -700,6 +721,14 @@ export class Controller {
     // Esc finishes a count (each click is already a counted item)
     if (this.drag.t === "poly" && this.drag.kind === "count") {
       this.finishPoly();
+      return true;
+    }
+    // Esc while placing a Cloud+ text keeps the cloud without it
+    if (this.drag.t === "callout" && this.drag.plus) {
+      const cloud = this.drag.plus;
+      this.drag = { t: "idle" };
+      this.finishCreate(cloud, "Cloud");
+      this.host.redraw();
       return true;
     }
     if (this.drag.t !== "idle") {
@@ -751,4 +780,22 @@ export function keepOnPage(page: PageLayout, ms: Markup[]): Markup[] {
   const dx = shift(b[0], b[2], pb[0], pb[2]);
   const dy = shift(b[1], b[3], pb[1], pb[3]);
   return dx || dy ? ms.map((m) => translate(m, dx, dy)) : ms;
+}
+
+/** The point on a closed outline nearest to `p`. */
+export function nearestOnOutline(pts: readonly Pt[], p: Pt): Pt {
+  let best: Pt = pts[0] ?? p;
+  let bestD = Infinity;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const l2 = dx * dx + dy * dy;
+    const t = l2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2)) : 0;
+    const q: Pt = [a[0] + t * dx, a[1] + t * dy];
+    const dq = dist(q, p);
+    if (dq < bestD) [best, bestD] = [q, dq];
+  }
+  return best;
 }

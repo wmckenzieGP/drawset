@@ -151,6 +151,42 @@ const CASES: Case[] = [
       expect(o.get("AP").get("N").get("Resources").get("XObject").get("Im0").get("Subtype").asName()).toBe("Image");
     },
   },
+  {
+    kind: "arc",
+    m: { points: [[100, 500], [200, 440], [300, 500]], style: style({ width: 2 }) },
+    subtype: "PolyLine",
+    check: (o) => {
+      // other viewers draw the curve from /Vertices; the three control points live in Drawset's data
+      expect(arr(o, "Vertices").length).toBeGreaterThan(20);
+      expect(JSON.parse(o.get("DrawsetData").asString()).pts).toHaveLength(6);
+    },
+  },
+  {
+    kind: "dimension",
+    m: { points: [[100, 700], [400, 700], [250, 660]], measure: { scale: null, cutouts: [] }, style: style({ lineStart: "ClosedArrow", lineEnd: "ClosedArrow", width: 1 }) },
+    subtype: "Line",
+    check: (o) => {
+      expect(name(o, "IT")).toBe("LineDimension");
+      // 40 points above the line (user space is y-up, so anticlockwise from left to right)
+      expect(o.get("LL").asNumber()).toBeCloseTo(40, 3);
+      expect(o.get("Cap").asBoolean()).toBe(true);
+    },
+  },
+  {
+    kind: "radius",
+    m: { points: [[450, 300], [500, 300]], measure: { scale: null, cutouts: [] }, style: style({ width: 1 }) },
+    subtype: "Circle",
+    check: (o) => expect(o.get("RD").isArray()).toBe(true),
+  },
+  {
+    kind: "volume",
+    m: { points: [[100, 760], [300, 760], [300, 820], [100, 820]], measure: { scale: null, cutouts: [], depth: 3 }, style: style({ fill: [0.8, 0.9, 1] }) },
+    subtype: "Polygon",
+    check: (o) => {
+      expect(name(o, "IT")).toBe("PolygonDimension");
+      expect(JSON.parse(o.get("DrawsetData").asString()).depth).toBe(3);
+    },
+  },
 ];
 
 describe("markup round trips", () => {

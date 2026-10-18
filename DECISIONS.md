@@ -75,3 +75,6 @@ Drawset's users already know a particular construction markup app, so its keys, 
 
 ## 30. Groups use /IRT with /RT /Group (18/10/2026)
 ISO 32000 defines grouped annotations as members with /IRT to the group's primary and /RT /Group, and other editors read them that way, so Drawset stores a group the same way rather than in /DrawsetData. In the app each member keeps `group` (the first markup's id); `withMarkups` keeps groups consistent when markups are deleted or moved to another page, and deleting an annotation no longer takes its group members with it (only replies and statuses).
+
+## 31. How the new tools are stored (18/10/2026)
+Each new tool is written as the nearest standard annotation, so other editors show it: an arc is a /PolyLine whose /Vertices follow the curve; a dimension is a /Line with /IT /LineDimension, /LL, /LLE and /Cap; radius and diameter are /Circle; a volume is a /Polygon with /IT /PolygonDimension. Points the standard keys cannot hold (the arc's middle point, a circle's centre and edge) and the volume's depth go in /DrawsetData. A dimension from another editor (a /LineDimension with a non-zero /LL) opens as a dimension. Cloud+ is a cloud and a callout grouped with /RT /Group, rather than a new private kind. The flag tool is left out: what it should look like and do is not clear enough to copy without William's input.

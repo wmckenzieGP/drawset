@@ -33,6 +33,9 @@ const GROUPS: [ToolId, string, string][][] = [
     ["ellipse", "Ellipse", "ellipse"],
     ["polygon", "Polygon: click points, double-click to finish", "polygon"],
     ["cloud", "Cloud: drag a box, or click points", "cloud"],
+    ["cloudplus", "Cloud+: drag the cloud, then click where its text goes", "cloudplus"],
+    ["arc", "Arc: click the start, a point on the arc, then the end", "arc"],
+    ["dimension", "Dimension: click both ends, then where the dimension line goes", "dimension"],
     ["link", "Hyperlink: drag an area that goes to a page, a file or a web address", "link"],
   ],
   [
@@ -44,6 +47,9 @@ const GROUPS: [ToolId, string, string][][] = [
     ["perimeter", "Perimeter: click points, double-click to finish", "perimeter"],
     ["count", "Count: click each item, Esc or double-click to finish", "count"],
     ["angle", "Angle: click a point, the vertex, then another point", "angle"],
+    ["radius", "Radius: drag from the centre to the edge", "radius"],
+    ["diameter", "Diameter: drag from the centre to the edge", "diameter"],
+    ["volume", "Volume: click points, double-click to finish; set the depth in Measurements", "volume"],
   ],
   [
     ["erase", "Erase content: drag an area (removed when you apply redactions)", "erase"],

@@ -30,6 +30,11 @@ export type MarkupKind =
   | "perimeter"
   | "count"
   | "angle"
+  | "arc"
+  | "dimension"
+  | "volume"
+  | "radius"
+  | "diameter"
   | "redact"
   | "erase"
   | "link"
@@ -140,6 +145,8 @@ export interface MeasureData {
   scale: PageScale | null;
   /** Holes subtracted from an area, page space. */
   cutouts: Pt[][];
+  /** Volume: depth in metres. */
+  depth?: number;
 }
 
 export const DEFAULT_STYLE: MarkupStyle = {
@@ -183,13 +190,18 @@ export const KIND_LABELS: Record<MarkupKind, string> = {
   angle: "Angle",
   redact: "Redaction",
   erase: "Erase",
+  arc: "Arc",
+  dimension: "Dimension",
+  volume: "Volume",
+  radius: "Radius",
+  diameter: "Diameter",
   link: "Link",
   foreign: "Annotation",
 };
 
 /** Which kinds use the frame rect as their primary geometry. */
 export const BOX_KINDS: ReadonlySet<MarkupKind> = new Set(["rectangle", "ellipse", "textbox", "note", "stamp", "image", "foreign", "redact", "erase", "link"]);
-export const VERTEX_KINDS: ReadonlySet<MarkupKind> = new Set(["line", "arrow", "polyline", "polygon", "cloud", "length", "polylength", "area", "perimeter", "count", "angle"]);
+export const VERTEX_KINDS: ReadonlySet<MarkupKind> = new Set(["line", "arrow", "polyline", "polygon", "cloud", "length", "polylength", "area", "perimeter", "count", "angle", "arc", "dimension", "volume", "radius", "diameter"]);
 export const TEXT_MARKUP_KINDS: ReadonlySet<MarkupKind> = new Set(["highlight", "underline", "strikeout"]);
 
 let idCounter = 0;

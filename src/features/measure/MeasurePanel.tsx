@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import { KIND_LABELS, type Markup, type MarkupKind } from "../../markup/model";
-import { formatNumber, isMeasure, measureValue, scaleLabel } from "../../markup/measure";
-import type { DocTab } from "../../state/store";
+import { convert, formatNumber, isMeasure, measureValue, scaleLabel } from "../../markup/measure";
+import { nowIso } from "../../markup/model";
+import { commit, withMarkups, type DocTab } from "../../state/store";
+import { setVolumeDepth } from "../viewer/create";
 import { openCalibrateDialog } from "./CalibrateDialog";
 
 export interface Total {
@@ -25,7 +27,7 @@ export function totalsByType(ms: Markup[]): Total[] {
     t.precision = Math.max(t.precision, m.measure?.scale?.precision ?? 0);
     map.set(key, t);
   }
-  const order: MarkupKind[] = ["length", "polylength", "perimeter", "area", "count", "angle"];
+  const order: MarkupKind[] = ["length", "polylength", "dimension", "perimeter", "radius", "diameter", "area", "volume", "count", "angle"];
   return [...map.values()].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind) || a.unit.localeCompare(b.unit));
 }
 
@@ -65,6 +67,7 @@ export function MeasurePanel({ tab }: { tab: DocTab }) {
               </div>
             ))
           )}
+          {selected.length === 1 && selected[0].kind === "volume" && <VolumeDepth tab={tab} m={selected[0]} />}
         </>
       )}
       {pageTotals.length > 0 && (
@@ -79,5 +82,32 @@ export function MeasurePanel({ tab }: { tab: DocTab }) {
         </>
       )}
     </div>
+  );
+}
+
+/** The depth a volume is measured to, in the scale's display unit. */
+function VolumeDepth({ tab, m }: { tab: DocTab; m: Markup }) {
+  const unit = m.measure?.scale?.displayUnit ?? "m";
+  const shown = Math.round(convert(m.measure?.depth ?? 1, "m", unit) * 1e6) / 1e6;
+  return (
+    <label className="prop-row">
+      <span>Depth</span>
+      <input
+        type="number"
+        min={0}
+        step="any"
+        value={shown}
+        disabled={m.locked}
+        onChange={(e) => {
+          const v = Number(e.target.value);
+          if (!(v > 0)) return;
+          const depth = convert(v, unit, "m");
+          setVolumeDepth(depth);
+          commit(tab.key, "Set depth", (s) => withMarkups(s, [{ ...m, measure: { scale: m.measure?.scale ?? null, cutouts: m.measure?.cutouts ?? [], depth }, modified: nowIso() }]), `depth:${m.id}`);
+        }}
+        data-testid="volume-depth"
+      />
+      <span className="prop-value">{unit}</span>
+    </label>
   );
 }

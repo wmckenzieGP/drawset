@@ -11,7 +11,7 @@ import { clampScale } from "../features/viewer/Viewer";
 
 let clipboard: { docId: string; markups: Markup[] } | null = null;
 
-const MEASURE_TOOLS = new Set<ToolId>(["calibrate", "length", "polylength", "area", "cutout", "perimeter", "count", "angle"]);
+const MEASURE_TOOLS = new Set<ToolId>(["calibrate", "length", "polylength", "area", "cutout", "perimeter", "count", "angle", "dimension", "radius", "diameter", "volume"]);
 
 export function setTool(tool: ToolId) {
   useApp.setState((s) => ({ tools: { ...s.tools, tool, chest: null } }));

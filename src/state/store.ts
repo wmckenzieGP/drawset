@@ -111,6 +111,8 @@ export type ToolId =
   | "chest"
   /** Draws the title-block box that pages are labelled from. */
   | "labelregion"
+  /** A cloud with a callout leader and text, grouped. */
+  | "cloudplus"
   | MarkupKind;
 
 export interface ToolState {
@@ -294,6 +296,10 @@ export const KIND_DEFAULTS: Partial<Record<MarkupKind, Partial<MarkupStyle>>> = 
   perimeter: { color: [0.55, 0.2, 0.75], width: 1.5, fontSize: 10 },
   count: { color: [0.9, 0.1, 0.1], width: 1, fontSize: 10 },
   angle: { color: [0.85, 0.45, 0.05], width: 1, fontSize: 10 },
+  dimension: { color: [0.1, 0.35, 0.85], width: 0.75, lineStart: "ClosedArrow", lineEnd: "ClosedArrow", fontSize: 10 },
+  volume: { color: [0.05, 0.4, 0.6], fill: [0.78, 0.9, 0.95], opacity: 1, width: 1, fontSize: 10 },
+  radius: { color: [0.55, 0.2, 0.75], width: 1, fontSize: 10 },
+  diameter: { color: [0.55, 0.2, 0.75], width: 1, fontSize: 10 },
   link: { color: null, width: 1 },
 };
 

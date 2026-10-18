@@ -5,11 +5,11 @@
  */
 import * as mupdf from "mupdf";
 import { writeLinkTarget } from "./links";
-import { apply, inflate, invert, type Matrix, type Pt, transformRect } from "../../markup/geometry";
-import { buildAppearance, calloutLeader, type TextFont } from "../../markup/appearance";
+import { apply, dist, inflate, invert, type Matrix, type Pt, type Rect, transformRect } from "../../markup/geometry";
+import { arcPoints, buildAppearance, calloutLeader, type TextFont } from "../../markup/appearance";
 import { appearanceToPdf, FONT_RESOURCE } from "../../markup/pdfAppearance";
 import { colourHex, newId, type Markup, type RGB } from "../../markup/model";
-import { isMeasure, measureValue } from "../../markup/measure";
+import { dimensionLine, isMeasure, measureValue } from "../../markup/measure";
 import { measureObject } from "./measureDict";
 
 export const PRIVATE_KEY = "DrawsetData";
@@ -46,13 +46,19 @@ export function subtypeFor(m: Markup): mupdf.PDFAnnotationType {
     case "image":
       return "Stamp";
     case "length":
+    case "dimension":
       return "Line";
     case "polylength":
     case "angle":
+    case "arc":
       return "PolyLine";
     case "area":
     case "perimeter":
+    case "volume":
       return "Polygon";
+    case "radius":
+    case "diameter":
+      return "Circle";
     case "count":
       return "Ink";
     case "redact":
@@ -191,7 +197,10 @@ function putPrivate(ctx: WriteContext, obj: mupdf.PDFObject, m: Markup) {
     data.fontSize = m.style.fontSize;
     data.font = m.style.fontFamily;
     if (m.measure?.cutouts.length) data.cutouts = m.measure.cutouts.map((c) => userPts(ctx.toUser, c).map((v) => Math.round(v * 1e6) / 1e6));
+    if (m.kind === "volume") data.depth = m.measure?.depth ?? 1;
   }
+  // control points the standard keys cannot hold (the arc's middle point, a circle's centre and edge, the dimension offset)
+  if (m.kind === "arc" || m.kind === "radius" || m.kind === "diameter" || m.kind === "dimension") data.pts = userPts(ctx.toUser, m.points).map((v) => Math.round(v * 1e6) / 1e6);
   if (m.stampId) data.stampId = m.stampId;
   if (m.stampText) data.stampText = m.stampText;
   if (m.kind === "textbox" || m.kind === "callout") {
@@ -320,9 +329,54 @@ export function writeMarkup(ctx: WriteContext, annot: mupdf.PDFAnnotation, m: Ma
       obj.put("Name", doc.newName(m.image ? "Image" : "Draft"));
       if (m.image) obj.put("IT", doc.newName("StampImage"));
       break;
+    case "arc": {
+      obj.put("Vertices", nums(doc, userPts(T, arcPoints(m))));
+      const le = doc.newArray();
+      le.push(doc.newName(s.lineStart));
+      le.push(doc.newName(s.lineEnd));
+      obj.put("LE", le);
+      putColour(ctx, obj, "IC", s.fill);
+      putBorder(ctx, obj, m);
+      obj.delete("IT");
+      break;
+    }
+    case "dimension": {
+      // a dimension line: /L the measured points, /LL the offset of the dimension line (leader lines), /LLE their overshoot
+      const [ua, ub] = [userPts(T, [m.points[0]]), userPts(T, [m.points[1]])];
+      obj.put("L", nums(doc, [...ua, ...ub]));
+      const { a2 } = dimensionLine(m.points);
+      const u2 = userPts(T, [a2]);
+      const dx = ub[0] - ua[0];
+      const dy = ub[1] - ua[1];
+      const len = Math.hypot(dx, dy) || 1;
+      // positive /LL is anticlockwise from the line's direction in user space
+      obj.put("LL", doc.newReal(((u2[0] - ua[0]) * -dy + (u2[1] - ua[1]) * dx) / len));
+      obj.put("LLE", doc.newReal(3));
+      obj.put("Cap", doc.newBoolean(true));
+      obj.put("CP", doc.newName("Top"));
+      const le = doc.newArray();
+      le.push(doc.newName(s.lineStart));
+      le.push(doc.newName(s.lineEnd));
+      obj.put("LE", le);
+      putColour(ctx, obj, "IC", s.fill);
+      putBorder(ctx, obj, m);
+      obj.put("IT", doc.newName("LineDimension"));
+      if (m.measure?.scale) obj.put("Measure", measureObject(doc, m.measure.scale));
+      else obj.delete("Measure");
+      break;
+    }
+    case "radius":
+    case "diameter":
+      putColour(ctx, obj, "IC", s.fill);
+      putBorder(ctx, obj, m);
+      obj.delete("BE");
+      if (m.measure?.scale) obj.put("Measure", measureObject(doc, m.measure.scale));
+      else obj.delete("Measure");
+      break;
     case "length":
     case "polylength":
     case "area":
+    case "volume":
     case "perimeter":
     case "angle": {
       if (m.kind === "length") obj.put("L", nums(doc, userPts(T, m.points.slice(0, 2))));
@@ -369,9 +423,11 @@ export function writeMarkup(ctx: WriteContext, annot: mupdf.PDFAnnotation, m: Ma
   const ap = buildAppearance(m);
   const pdf = appearanceToPdf(ap, T);
   const rect = pdf.bbox;
-  if (m.kind === "callout" || m.kind === "rectangle" || m.kind === "ellipse") {
+  if (m.kind === "callout" || m.kind === "rectangle" || m.kind === "ellipse" || m.kind === "radius" || m.kind === "diameter") {
     // /RD: distances from /Rect to the text box, or to the outer edge of the shape's border (user space)
-    const inner = m.kind === "callout" ? m.rect : inflate(m.rect, s.color ? s.width / 2 : 0);
+    const r = m.points.length >= 2 ? dist(m.points[0], m.points[1]) : 0;
+    const circle: Rect = m.points.length >= 2 ? [m.points[0][0] - r, m.points[0][1] - r, m.points[0][0] + r, m.points[0][1] + r] : m.rect;
+    const inner = m.kind === "callout" ? m.rect : inflate(m.kind === "radius" || m.kind === "diameter" ? circle : m.rect, s.color ? s.width / 2 : 0);
     const box = transformRect(inner, T);
     obj.put("RD", nums(doc, [box[0] - rect[0], box[1] - rect[1], rect[2] - box[2], rect[3] - box[3]].map((v) => Math.max(0, v))));
   }

@@ -146,7 +146,7 @@ export function sameScale(a: PageScale | null | undefined, b: PageScale | null |
 
 // ---------- measurement values ----------
 
-export const MEASURE_KINDS: ReadonlySet<MarkupKind> = new Set(["length", "polylength", "area", "perimeter", "count", "angle"]);
+export const MEASURE_KINDS: ReadonlySet<MarkupKind> = new Set(["length", "polylength", "area", "perimeter", "count", "angle", "dimension", "volume", "radius", "diameter"]);
 
 export function isMeasure(kind: MarkupKind): boolean {
   return MEASURE_KINDS.has(kind);
@@ -207,6 +207,39 @@ export interface MeasureResult {
 }
 
 const SQUARE: Record<Unit, string> = { mm: "mm²", cm: "cm²", m: "m²", in: "sq in", ft: "sq ft" };
+const CUBIC: Record<Unit, string> = { mm: "mm³", cm: "cm³", m: "m³", in: "cu in", ft: "cu ft" };
+
+/** Points sampled along the circular arc from `a` through `m` to `b` (a straight line when they are in line). */
+export function arcThrough(a: Pt, m: Pt, b: Pt, steps = 32): Pt[] {
+  const d = 2 * (a[0] * (m[1] - b[1]) + m[0] * (b[1] - a[1]) + b[0] * (a[1] - m[1]));
+  if (Math.abs(d) < 1e-9) return [a, b];
+  const sq = (p: Pt) => p[0] * p[0] + p[1] * p[1];
+  const cx = (sq(a) * (m[1] - b[1]) + sq(m) * (b[1] - a[1]) + sq(b) * (a[1] - m[1])) / d;
+  const cy = (sq(a) * (b[0] - m[0]) + sq(m) * (a[0] - b[0]) + sq(b) * (m[0] - a[0])) / d;
+  const r = Math.hypot(a[0] - cx, a[1] - cy);
+  const ang = (p: Pt) => Math.atan2(p[1] - cy, p[0] - cx);
+  const a0 = ang(a);
+  const norm = (x: number) => ((x % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  // go the way that passes through m
+  let sweep = norm(ang(b) - a0);
+  if (norm(ang(m) - a0) > sweep) sweep -= 2 * Math.PI;
+  const out: Pt[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = a0 + (sweep * i) / steps;
+    out.push([cx + r * Math.cos(t), cy + r * Math.sin(t)]);
+  }
+  return out;
+}
+
+/** A dimension's measured points `a`, `b` and the dimension line through the offset point `o`. */
+export function dimensionLine(pts: readonly Pt[]): { a: Pt; b: Pt; a2: Pt; b2: Pt; offset: number; normal: Pt } {
+  const [a, b] = pts;
+  const l = dist(a, b) || 1;
+  const normal: Pt = [-(b[1] - a[1]) / l, (b[0] - a[0]) / l];
+  const o = pts[2];
+  const offset = o ? (o[0] - a[0]) * normal[0] + (o[1] - a[1]) * normal[1] : 0;
+  return { a, b, a2: [a[0] + normal[0] * offset, a[1] + normal[1] * offset], b2: [b[0] + normal[0] * offset, b[1] + normal[1] * offset], offset, normal };
+}
 
 export function areaUnitLabel(u: Unit): string {
   return SQUARE[u];
@@ -243,10 +276,24 @@ export function measureValue(m: Markup, scale: PageScale = m.measure?.scale ?? D
       const v = m.points.length >= 3 ? angleAt(m.points[0], m.points[1], m.points[2]) : 0;
       return { value: v, unit: "°", text: `${formatNumber(v, Math.min(p, 2) || 1)}°` };
     }
+    case "dimension": {
+      const v = m.points.length >= 2 ? dist(m.points[0], m.points[1]) * k : 0;
+      return { value: v, unit: u, text: `${formatNumber(v, p)} ${u}` };
+    }
+    case "radius":
+    case "diameter": {
+      const v = m.points.length >= 2 ? dist(m.points[0], m.points[1]) * k * (m.kind === "diameter" ? 2 : 1) : 0;
+      return { value: v, unit: u, text: `${m.kind === "diameter" ? "Ø" : "R"} ${formatNumber(v, p)} ${u}` };
+    }
+    case "volume": {
+      const depth = convert(m.measure?.depth ?? 1, "m", u);
+      const v = netArea(m.points, m.measure?.cutouts ?? []) * k * k * depth;
+      return { value: v, unit: CUBIC[u], text: `${formatNumber(v, p)} ${CUBIC[u]}` };
+    }
     default:
       return { value: 0, unit: "", text: "" };
   }
 }
 
 /** Number of vertices each measurement tool needs before it can finish. */
-export const MIN_POINTS: Partial<Record<MarkupKind, number>> = { length: 2, polylength: 2, area: 3, perimeter: 3, count: 1, angle: 3 };
+export const MIN_POINTS: Partial<Record<MarkupKind, number>> = { length: 2, polylength: 2, area: 3, perimeter: 3, count: 1, angle: 3, dimension: 3, volume: 3, radius: 2, diameter: 2 };

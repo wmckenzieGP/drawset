@@ -176,6 +176,7 @@ export function drawOverlay(p: OverlayParams) {
     }
     if (preview && preview.page.entry.id === page.entry.id) {
       const ctx = preview.m.kind === "highlight" || preview.m.kind === "highlighter" || preview.m.kind === "area" ? multiply : normal;
+      for (const x of preview.with ?? []) drawMarkup(normal, tab, page, x, scale * dpr);
       drawMarkup(ctx, tab, page, preview.m, scale * dpr);
       if (preview.m.kind === "link") linkHint(normal, preview.m, scale * dpr);
     }

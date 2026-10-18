@@ -127,7 +127,11 @@ export function imageAt(pageId: string, a: Pt, b: Pt | null): Markup | null {
   return { ...m, rect: [x0, y0, x0 + w, y0 + h], image };
 }
 
+/** Depth new volumes get, in metres: the last one set. */
+let volumeDepth = 1;
+export const setVolumeDepth = (metres: number) => void (volumeDepth = metres);
+
 /** A measurement on `page` at the page's current scale. */
 export function measureAt(kind: MarkupKind, page: PageEntry, pts: Pt[]): Markup {
-  return { ...baseMarkup(kind, page.id), points: pts, rect: bboxOf(pts), measure: { scale: page.scale, cutouts: [] } };
+  return { ...baseMarkup(kind, page.id), points: pts, rect: bboxOf(pts), measure: { scale: page.scale, cutouts: [], ...(kind === "volume" ? { depth: volumeDepth } : {}) } };
 }

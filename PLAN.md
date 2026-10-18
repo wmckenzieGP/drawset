@@ -61,5 +61,5 @@ William's first use: Drawset should work like the markup app his team already us
 - [x] F7 Bookmarks: add (Ctrl+B), rename, delete and drag to reorder.
 - [x] F8 Group and ungroup markups (Ctrl+G, Ctrl+Shift+G); Ctrl+drag copies; Ctrl+Shift+drag copies in a straight line.
 - [ ] F9 Text box: autosize (Alt+Z), typewriter tool (W); highlight tool draws a freehand highlight away from text. *(autosize and highlight done 18/10; typewriter open)*
-- [ ] F10 More markup tools with their keys: arc (Shift+C), dimension (Shift+L), Cloud+ (K), flag (Shift+F), radius, diameter, volume.
+- [x] F10 More markup tools with their keys: arc (Shift+C), dimension (Shift+L), Cloud+ (K), radius (Shift+Alt+U), diameter (Shift+Alt+D), volume (Shift+Alt+V). *(flag (Shift+F) left out until William says what he uses it for)*
 - [ ] F11 Format painter (Ctrl+Shift+C) and Spaces/layers as needed after William's next round of use.

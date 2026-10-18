@@ -252,3 +252,65 @@ test("Ctrl+G groups markups: clicking one picks them all, they move together, Ct
   await page.mouse.click(edge2.x, edge2.y);
   expect((await state(page)).selection).toEqual([a.id]);
 });
+
+test("Cloud+, arc, dimension, radius, diameter and volume tools draw from their keys", async ({ page }) => {
+  await page.goto("/");
+  await openFixture(page, "calibration.pdf");
+  await waitForPage(page);
+  const at = (x: number, y: number) => pagePoint(page, x, y);
+  const click = async (x: number, y: number) => {
+    const p = await at(x, y);
+    await page.mouse.click(p.x, p.y);
+  };
+  // Cloud+: drag the cloud, then click where the text goes; type it
+  await page.keyboard.press("k");
+  await drag(page, await at(0.1, 0.1), await at(0.25, 0.2));
+  const t = await at(0.4, 0.08);
+  await page.mouse.move(t.x, t.y, { steps: 4 });
+  await page.mouse.click(t.x, t.y);
+  await page.getByTestId("text-editor").fill("Check clearance");
+  await page.keyboard.press("Escape");
+  let ms = await markups(page);
+  expect(ms.map((m) => m.kind).sort()).toEqual(["callout", "cloud"]);
+  expect(ms.find((m) => m.kind === "callout")!.contents).toBe("Check clearance");
+  // the two are grouped
+  await page.keyboard.press("v");
+  await click(0.9, 0.9);
+  await click(0.1, 0.15);
+  expect((await state(page)).selection).toHaveLength(2);
+
+  await page.keyboard.press("Shift+C");
+  await click(0.1, 0.4);
+  await click(0.2, 0.33);
+  await click(0.3, 0.4);
+  await page.keyboard.press("Shift+L");
+  await click(0.4, 0.4);
+  await click(0.6, 0.4);
+  await click(0.5, 0.35);
+  await page.keyboard.press("Shift+Alt+U");
+  await drag(page, await at(0.2, 0.6), await at(0.25, 0.6));
+  await page.keyboard.press("Shift+Alt+D");
+  await drag(page, await at(0.4, 0.6), await at(0.45, 0.6));
+  await page.keyboard.press("Shift+Alt+V");
+  await click(0.6, 0.6);
+  await click(0.8, 0.6);
+  await click(0.8, 0.7);
+  const last = await at(0.6, 0.7);
+  await page.mouse.dblclick(last.x, last.y);
+  ms = await markups(page);
+  expect(ms.map((m) => m.kind).sort()).toEqual(["arc", "callout", "cloud", "diameter", "dimension", "radius", "volume"]);
+
+  // the volume's depth is set in the Measurements panel and changes its value
+  await page.keyboard.press("v");
+  await click(0.7, 0.65);
+  await expect(page.getByTestId("measure-value")).toContainText("Volume");
+  const before = await page.getByTestId("measure-value").textContent();
+  await page.getByTestId("volume-depth").fill("2");
+  await expect(page.getByTestId("measure-value")).not.toHaveText(before!);
+  // and everything survives a save
+  const download = page.waitForEvent("download");
+  await page.getByTestId("tb-save").click();
+  const saved = mupdf.Document.openDocument(new Uint8Array(readFileSync(await (await download).path())), "application/pdf").asPDF()!;
+  const kinds = (saved.loadPage(0) as mupdf.PDFPage).getAnnotations().map((a) => JSON.parse(a.getObject().get("DrawsetData").asString() || "{}").kind);
+  expect(kinds.sort()).toEqual(["arc", "callout", "cloud", "diameter", "dimension", "radius", "volume"]);
+});
