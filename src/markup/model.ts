@@ -24,6 +24,7 @@ export type MarkupKind =
   | "strikeout"
   | "stamp"
   | "image"
+  | "signature"
   | "length"
   | "polylength"
   | "area"
@@ -121,6 +122,8 @@ export interface Markup {
   /** Stamp text lines for built-in stamps. */
   stampText?: string[];
   image?: MarkupImage;
+  /** A signature's line under the picture: the signer's name and the date signed. */
+  caption?: string;
   /** Keep the annotation's existing appearance stream; geometry edits only move/scale /Rect. */
   keepAppearance?: boolean;
   /** For copies of kept appearances: object number of the annotation whose /AP is reused. */
@@ -182,6 +185,7 @@ export const KIND_LABELS: Record<MarkupKind, string> = {
   strikeout: "Strikethrough",
   stamp: "Stamp",
   image: "Image",
+  signature: "Signature",
   length: "Length",
   polylength: "Polylength",
   area: "Area",
@@ -200,7 +204,7 @@ export const KIND_LABELS: Record<MarkupKind, string> = {
 };
 
 /** Which kinds use the frame rect as their primary geometry. */
-export const BOX_KINDS: ReadonlySet<MarkupKind> = new Set(["rectangle", "ellipse", "textbox", "note", "stamp", "image", "foreign", "redact", "erase", "link"]);
+export const BOX_KINDS: ReadonlySet<MarkupKind> = new Set(["rectangle", "ellipse", "textbox", "note", "stamp", "image", "signature", "foreign", "redact", "erase", "link"]);
 export const VERTEX_KINDS: ReadonlySet<MarkupKind> = new Set(["line", "arrow", "polyline", "polygon", "cloud", "length", "polylength", "area", "perimeter", "count", "angle", "arc", "dimension", "volume", "radius", "diameter"]);
 export const TEXT_MARKUP_KINDS: ReadonlySet<MarkupKind> = new Set(["highlight", "underline", "strikeout"]);
 

@@ -181,6 +181,21 @@ export function drawOverlay(p: OverlayParams) {
       if (preview.m.kind === "link") linkHint(normal, preview.m, scale * dpr);
     }
     // snap target under the pointer (device space, fixed size)
+    const ring = controller.eraserRing();
+    if (ring && ring.pageId === page.entry.id) {
+      const x = ring.pt[0] * page.m[0] + ring.pt[1] * page.m[2] + page.m[4] + page.x - p.scrollLeft;
+      const y = ring.pt[0] * page.m[1] + ring.pt[1] * page.m[3] + page.m[5] + page.y - p.scrollTop;
+      normal.save();
+      normal.setTransform(dpr, 0, 0, dpr, 0, 0);
+      normal.lineWidth = 1;
+      normal.strokeStyle = "rgba(0,0,0,0.75)";
+      normal.fillStyle = "rgba(255,255,255,0.35)";
+      normal.beginPath();
+      normal.arc(x, y, ring.r * scale, 0, Math.PI * 2);
+      normal.fill();
+      normal.stroke();
+      normal.restore();
+    }
     const sm = controller.snapMark;
     if (sm && sm.pageId === page.entry.id) {
       const x = sm.pt[0] * page.m[0] + sm.pt[1] * page.m[2] + page.m[4] + page.x - p.scrollLeft;

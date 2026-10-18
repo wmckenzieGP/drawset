@@ -1,7 +1,8 @@
 /** Builds new markups from tool input, using the tool's default style. */
-import { stampDef, stampSize, textBoxHeight, textPadding } from "../../markup/appearance";
+import { signatureFrameHeight, stampDef, stampSize, textBoxHeight, textPadding } from "../../markup/appearance";
+import { currentSignature, signatureCaption, useSignatures } from "../signature/signatures";
 import { bboxOf, normRect, type Pt, type Quad, type Rect } from "../../markup/geometry";
-import { KIND_LABELS, newId, nowIso, type Markup, type MarkupKind } from "../../markup/model";
+import { KIND_LABELS, newId, nowIso, type Markup, type MarkupImage, type MarkupKind } from "../../markup/model";
 import { applyTemplate } from "../toolchest/chest";
 import { defaultStyleFor, useApp, type PageEntry } from "../../state/store";
 
@@ -107,8 +108,7 @@ export function stampAt(pageId: string, a: Pt, b: Pt | null): Markup {
   return { ...m, rect, stampId: image ? undefined : tools.stampId, stampText, image: image ?? undefined, subject: image ? "Image Stamp" : "Stamp" };
 }
 
-export function imageAt(pageId: string, a: Pt, b: Pt | null): Markup | null {
-  const image = useApp.getState().tools.pendingImage;
+export function imageAt(pageId: string, a: Pt, b: Pt | null, image: MarkupImage | null = useApp.getState().tools.pendingImage ?? null): Markup | null {
   if (!image) return null;
   const m = baseMarkup("image", pageId);
   const scale = Math.min(1, 300 / Math.max(image.width, image.height));
@@ -125,6 +125,28 @@ export function imageAt(pageId: string, a: Pt, b: Pt | null): Markup | null {
     y0 = r[1];
   }
   return { ...m, rect: [x0, y0, x0 + w, y0 + h], image };
+}
+
+/** Width a signature is placed at with a click: 50 mm. */
+export const SIGNATURE_WIDTH = (50 * 72) / 25.4;
+
+/** Your current signature, centred on a click or fitted (in proportion) into a dragged box. */
+export function signatureAt(pageId: string, a: Pt, b: Pt | null): Markup | null {
+  const sig = currentSignature();
+  if (!sig) return null;
+  const m = baseMarkup("signature", pageId);
+  const { caption } = useSignatures.getState();
+  const imageH = (SIGNATURE_WIDTH * sig.image.height) / sig.image.width;
+  let w = SIGNATURE_WIDTH;
+  let h = signatureFrameHeight(imageH, caption);
+  let rect: Rect = [a[0] - w / 2, a[1] - h / 2, a[0] + w / 2, a[1] + h / 2];
+  if (b && Math.abs(b[0] - a[0]) > 8 && Math.abs(b[1] - a[1]) > 8) {
+    const r = normRect([a[0], a[1], b[0], b[1]]);
+    const s = Math.min((r[2] - r[0]) / w, (r[3] - r[1]) / h);
+    [w, h] = [w * s, h * s];
+    rect = [r[0], r[1], r[0] + w, r[1] + h];
+  }
+  return { ...m, rect, image: sig.image, caption: caption ? signatureCaption(sig.name) : undefined, subject: "Signature" };
 }
 
 /** Depth new volumes get, in metres: the last one set. */

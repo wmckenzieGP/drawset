@@ -44,6 +44,7 @@ export function subtypeFor(m: Markup): mupdf.PDFAnnotationType {
       return "StrikeOut";
     case "stamp":
     case "image":
+    case "signature":
       return "Stamp";
     case "length":
     case "dimension":
@@ -202,6 +203,7 @@ function putPrivate(ctx: WriteContext, obj: mupdf.PDFObject, m: Markup) {
   // control points the standard keys cannot hold (the arc's middle point, a circle's centre and edge, the dimension offset)
   if (m.kind === "arc" || m.kind === "radius" || m.kind === "diameter" || m.kind === "dimension") data.pts = userPts(ctx.toUser, m.points).map((v) => Math.round(v * 1e6) / 1e6);
   if (m.stampId) data.stampId = m.stampId;
+  if (m.caption) data.caption = m.caption;
   if (m.stampText) data.stampText = m.stampText;
   if (m.kind === "textbox" || m.kind === "callout") {
     data.font = m.style.fontFamily;
@@ -326,7 +328,8 @@ export function writeMarkup(ctx: WriteContext, annot: mupdf.PDFAnnotation, m: Ma
       break;
     case "stamp":
     case "image":
-      obj.put("Name", doc.newName(m.image ? "Image" : "Draft"));
+    case "signature":
+      obj.put("Name", doc.newName(m.kind === "signature" ? "Signature" : m.image ? "Image" : "Draft"));
       if (m.image) obj.put("IT", doc.newName("StampImage"));
       break;
     case "arc": {
