@@ -1,5 +1,6 @@
 /** Commands shared by menus, toolbar and keyboard shortcuts. */
 import { cloneMarkup } from "../markup/edit";
+import { textBoxHeight, textPadding, textWidth } from "../markup/appearance";
 import { newId, nowIso, type Markup, type ReviewStatus } from "../markup/model";
 import { closeTab, openWithDialog, saveActive, saveCopyOf, saveTab } from "../state/documents";
 import { chooseImageTool } from "./images";
@@ -92,6 +93,14 @@ export const cmd = {
       const sel = new Set(t.selection.filter((id) => t.state.markups[id]));
       if (!sel.size) return;
       commit(k, how === "front" ? "Bring to front" : how === "back" ? "Send to back" : how === "forward" ? "Bring forward" : "Send backward", (s) => ({ ...s, markups: arranged(s.markups, sel, how) }));
+    }),
+  /** Fits selected text boxes and callouts to their text, keeping the top-left corner. */
+  autosize: () =>
+    withActive((k) => {
+      const t = activeTab()!;
+      const ms = t.selection.map((id) => t.state.markups[id]).filter((m) => m && !m.locked && (m.kind === "textbox" || m.kind === "callout") && m.contents);
+      if (!ms.length) return;
+      commit(k, "Autosize text", (s) => withMarkups(s, ms.map(fitToText)));
     }),
   openSearch: () => {
     showPanel("search");
@@ -213,4 +222,15 @@ export function arranged(markups: Record<string, Markup>, sel: Set<string>, how:
   const out: Record<string, Markup> = {};
   for (const id of order) out[id] = sel.has(id) ? { ...markups[id], modified: nowIso() } : markups[id];
   return out;
+}
+
+/** A text box or callout sized to its text: as wide as its longest line, as tall as its lines. */
+export function fitToText(m: Markup): Markup {
+  const s = m.style;
+  const pad = textPadding(m);
+  const lines = m.contents.replace(/\r\n?/g, "\n").split("\n");
+  const w = Math.max(...lines.map((l) => textWidth(s.fontFamily, s.fontSize, l))) + 2 * pad + 1;
+  const h = textBoxHeight(s.fontFamily, s.fontSize, m.contents, w, pad);
+  const r = m.rect;
+  return { ...m, rect: [r[0], r[1], r[0] + w, r[1] + h], modified: nowIso() };
 }

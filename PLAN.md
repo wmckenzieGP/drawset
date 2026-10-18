@@ -58,8 +58,8 @@ William's first use: Drawset should work like the markup app his team already us
 - [x] F4 Shortcuts from one key map, matching the familiar keys for every command Drawset has; menus, tooltips and the F1 list read it. *Accept:* e2e presses tool and panel keys and finds them in menus and the list.
 - [x] F5 Layout: menus File, Edit, View, Document, Tools, Window, Help; navigation bar under the document; status bar with Grid, Snap, Content, Markup, Reuse, Sync, sheet size, scale and pointer position; panels in bars on both sides, movable by right-click; bars can be hidden (F4, F8, F9). *Accept:* e2e moves a panel and toggles panels by key.
 - [x] F6 Bring forward / to front, send backward / to back (Ctrl+J, Ctrl+Shift+J, Ctrl+[, Ctrl+Shift+[), saved as the /Annots order. *Accept:* unit test saves and reads back the new order.
-- [ ] F7 Bookmarks: add (Ctrl+B), rename, delete and drag to reorder.
-- [ ] F8 Group and ungroup markups (Ctrl+G, Ctrl+Shift+G); Ctrl+drag copies; Ctrl+Shift+drag copies in a straight line.
-- [ ] F9 Text box: autosize (Alt+Z), typewriter tool (W); highlight tool draws a freehand highlight away from text.
+- [x] F7 Bookmarks: add (Ctrl+B), rename, delete and drag to reorder.
+- [ ] F8 Group and ungroup markups (Ctrl+G, Ctrl+Shift+G); Ctrl+drag copies; Ctrl+Shift+drag copies in a straight line. *(copying done 18/10; grouping open)*
+- [ ] F9 Text box: autosize (Alt+Z), typewriter tool (W); highlight tool draws a freehand highlight away from text. *(autosize and highlight done 18/10; typewriter open)*
 - [ ] F10 More markup tools with their keys: arc (Shift+C), dimension (Shift+L), Cloud+ (K), flag (Shift+F), radius, diameter, volume.
 - [ ] F11 Format painter (Ctrl+Shift+C) and Spaces/layers as needed after William's next round of use.

@@ -1,4 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import * as mupdf from "mupdf";
 import { drag, markups, openFixture, pagePoint, waitForPage } from "./helpers";
 
 const state = (page: Page) =>
@@ -141,4 +143,82 @@ test("tool and panel keys, the shortcut list, and moving a panel to the other si
   await page.getByTestId("panel-move").click();
   expect((await state(page)).right).toBe("toolchest");
   await expect(page.locator(".main > .panel-bar").last().getByTestId("panel-toolchest")).toBeVisible();
+});
+
+test("Ctrl+drag copies a markup, Ctrl+click toggles it, Alt+Z fits a text box, highlight off text draws a band", async ({ page }) => {
+  await page.goto("/");
+  await openFixture(page, "calibration.pdf");
+  await waitForPage(page);
+  await page.keyboard.press("r");
+  await drag(page, await pagePoint(page, 0.2, 0.2), await pagePoint(page, 0.3, 0.3));
+  await page.keyboard.press("v");
+  const [rect] = await markups(page);
+  // Ctrl+drag leaves the original and adds a copy where it was dropped
+  await page.keyboard.down("Control");
+  await drag(page, await pagePoint(page, 0.2, 0.22), await pagePoint(page, 0.5, 0.22), 10);
+  await page.keyboard.up("Control");
+  const after = await markups(page);
+  expect(after).toHaveLength(2);
+  expect(after.find((m) => m.id === rect.id)!.rect).toEqual(rect.rect);
+  const copy = after.find((m) => m.id !== rect.id)!;
+  expect(copy.kind).toBe("rectangle");
+  expect(copy.rect[0]).toBeGreaterThan(rect.rect[2]);
+  // Ctrl+click without moving adds the original to the selection
+  await page.keyboard.down("Control");
+  const p = await pagePoint(page, 0.2, 0.28);
+  await page.mouse.click(p.x, p.y);
+  await page.keyboard.up("Control");
+  expect((await state(page)).selection.sort()).toEqual([rect.id, copy.id].sort());
+  // undo removes the copy
+  await page.keyboard.press("Control+z");
+  expect(await markups(page)).toHaveLength(1);
+
+  // Alt+Z shrinks a text box to its text
+  await page.keyboard.press("t");
+  await drag(page, await pagePoint(page, 0.2, 0.5), await pagePoint(page, 0.7, 0.8));
+  await page.getByTestId("text-editor").fill("Short");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("v");
+  const tb = (await markups(page)).find((m) => m.contents === "Short")!;
+  const tp = await pagePoint(page, 0.21, 0.51);
+  await page.mouse.click(tp.x, tp.y);
+  await page.keyboard.press("Alt+z");
+  const fitted = (await markups(page)).find((m) => m.id === tb.id)!;
+  expect(fitted.rect[2] - fitted.rect[0]).toBeLessThan(tb.rect[2] - tb.rect[0]);
+  expect(fitted.rect[3] - fitted.rect[1]).toBeLessThan(tb.rect[3] - tb.rect[1]);
+
+  // the highlight tool on an empty area draws a highlighter band
+  await page.keyboard.press("h");
+  await drag(page, await pagePoint(page, 0.1, 0.9), await pagePoint(page, 0.5, 0.92));
+  await expect.poll(async () => (await markups(page)).some((m) => m.kind === "highlighter")).toBe(true);
+});
+
+test("Ctrl+B adds a bookmark for the current page, renames it, and it is saved", async ({ page }) => {
+  await page.goto("/");
+  await openFixture(page, "set-200.pdf");
+  await waitForPage(page);
+  await page.keyboard.press("Control+ArrowRight");
+  await page.keyboard.press("Control+ArrowRight");
+  await page.keyboard.press("Control+b");
+  await expect(page.getByTestId("bm-rename")).toBeFocused();
+  await page.keyboard.type("Level 2 services");
+  await page.keyboard.press("Enter");
+  const rows = page.getByTestId("bm-row");
+  await expect(rows.filter({ hasText: "Level 2 services" })).toHaveCount(1);
+  // jumping away and clicking it comes back to page 3
+  await page.keyboard.press("Home");
+  await rows.filter({ hasText: "Level 2 services" }).getByRole("button").click();
+  await expect(page.getByTestId("page-position")).toHaveText("(3 of 200)");
+  // undo and redo
+  await page.keyboard.press("Control+z");
+  await expect(rows.filter({ hasText: "Level 2 services" })).toHaveCount(0);
+  await page.keyboard.press("Control+y");
+  await expect(rows.filter({ hasText: "Level 2 services" })).toHaveCount(1);
+  // the outline is written to the file
+  const download = page.waitForEvent("download");
+  await page.keyboard.press("Control+s");
+  const saved = mupdf.Document.openDocument(new Uint8Array(readFileSync(await (await download).path())), "application/pdf");
+  type Item = { title?: string; page?: number; down?: Item[] };
+  const flat = (l: Item[]): Item[] => l.flatMap((o) => [o, ...flat(o.down ?? [])]);
+  expect(flat((saved.loadOutline() ?? []) as Item[]).find((o) => o.title === "Level 2 services")?.page).toBe(2);
 });

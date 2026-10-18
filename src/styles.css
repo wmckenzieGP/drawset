@@ -699,6 +699,33 @@ button.link {
 .bm-title:hover {
   background: var(--bg-4);
 }
+.bm-row.selected .bm-title {
+  background: var(--bg-4);
+  color: var(--accent);
+}
+.bm-row.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent-2);
+}
+.bm-row.drop-into .bm-title {
+  outline: 1px dashed var(--accent-2);
+}
+.bm-rename {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 4px;
+}
+.bm-actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 4px;
+}
+.panel-title:has(.bm-actions) {
+  display: flex;
+  align-items: center;
+}
+p.small {
+  font-size: 11px;
+}
 .search-form {
   display: flex;
   gap: 4px;

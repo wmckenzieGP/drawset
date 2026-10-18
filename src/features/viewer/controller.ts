@@ -11,8 +11,8 @@ import { markupBounds } from "../../markup/appearance";
 import { clickField } from "../forms/forms";
 import { openLinkDialog } from "../links/LinkDialog";
 import { describeTarget, followLink } from "../links/navigate";
-import { canResize, hitTest, scaleBetween, setVertex, translate, vertexHandles, withDerivedRect } from "../../markup/edit";
-import { KIND_LABELS, nowIso, type Markup, type MarkupKind } from "../../markup/model";
+import { canResize, cloneMarkup, hitTest, scaleBetween, setVertex, translate, vertexHandles, withDerivedRect } from "../../markup/edit";
+import { KIND_LABELS, newId, nowIso, type Markup, type MarkupKind } from "../../markup/model";
 import { commit, flash, updateTab, useApp, withMarkups, type DocTab, type ToolId } from "../../state/store";
 import { boxMarkup, calloutAt, imageAt, inkMarkup, measureAt, noteAt, stampAt, textBoxAt, textMarkup, vertexMarkup } from "./create";
 import { isMeasure } from "../../markup/measure";
@@ -41,7 +41,7 @@ type DragState =
   | { t: "idle" }
   | { t: "pan"; sx: number; sy: number; left: number; top: number; button: number }
   | { t: "marquee"; page: PageLayout; a: Pt; b: Pt; additive: boolean }
-  | { t: "move"; page: PageLayout; start: Pt; last: Pt; originals: Markup[]; moved: boolean; at?: Pt }
+  | { t: "move"; page: PageLayout; start: Pt; last: Pt; originals: Markup[]; moved: boolean; at?: Pt; copy?: { toggle: string } }
   | { t: "resize"; page: PageLayout; original: Markup; handle: Handle; frame: Rect; current: Markup }
   | { t: "vertex"; page: PageLayout; original: Markup; index: number; current: Markup }
   | { t: "box"; kind: MarkupKind | "zoom" | "labelregion"; page: PageLayout; a: Pt; b: Pt; moved: boolean }
@@ -158,7 +158,7 @@ export class Controller {
   liveMarkup(m: Markup): Markup {
     const d = this.drag;
     if ((d.t === "resize" || d.t === "vertex") && d.original.id === m.id) return d.current;
-    if (d.t === "move" && d.moved) {
+    if (d.t === "move" && d.moved && !d.copy) {
       const o = d.originals.find((x) => x.id === m.id);
       if (o) return translate(o, d.last[0] - d.start[0], d.last[1] - d.start[1]);
     }
@@ -169,6 +169,9 @@ export class Controller {
   preview(): { page: PageLayout; m: Markup } | null {
     const d = this.drag;
     switch (d.t) {
+      case "move":
+        // a copy being dragged shows where it will go; the original stays put
+        return d.copy && d.moved && d.originals[0] ? { page: d.page, m: translate(d.originals[0], d.last[0] - d.start[0], d.last[1] - d.start[1]) } : null;
       case "box": {
         if (!d.moved || d.kind === "zoom" || d.kind === "labelregion") return null;
         if (d.kind === "stamp") return { page: d.page, m: stampAt(d.page.entry.id, d.a, d.b) };
@@ -290,7 +293,14 @@ export class Controller {
       }
       if (hit) {
         let sel = tab.selection;
-        if (e.shiftKey || e.ctrlKey || e.metaKey) {
+        if (e.ctrlKey || e.metaKey) {
+          // Ctrl+drag copies (Ctrl+Shift+drag in a straight line); a Ctrl+click without moving adds or removes it
+          const ids = sel.includes(hit.id) ? sel : [...sel, hit.id];
+          const originals = ids.map((id) => tab.state.markups[id]).filter((m) => m && m.kind !== "foreign" && m.pageId === target.entry.id);
+          this.drag = { t: "move", page: target, start: p, last: p, originals, moved: false, copy: { toggle: hit.id } };
+          return;
+        }
+        if (e.shiftKey) {
           sel = sel.includes(hit.id) ? sel.filter((x) => x !== hit.id) : [...sel, hit.id];
           this.setSelection(sel);
           return;
@@ -537,6 +547,19 @@ export class Controller {
         break;
       }
       case "move":
+        if (d.copy && !d.moved) {
+          const id = d.copy.toggle;
+          this.setSelection(tab.selection.includes(id) ? tab.selection.filter((x) => x !== id) : [...tab.selection, id]);
+          break;
+        }
+        if (d.copy && d.originals.length) {
+          const author = useApp.getState().author;
+          const copies = d.originals.map((m) => cloneMarkup(m, newId(), m.pageId, 0, 0, author));
+          const placed = this.placeMoved(d.page, d.at ?? null, copies.map((m) => translate(m, d.last[0] - d.start[0], d.last[1] - d.start[1])));
+          commit(tab.key, placed.length > 1 ? "Copy markups" : "Copy markup", (s) => withMarkups(s, placed));
+          this.setSelection(placed.map((m) => m.id));
+          break;
+        }
         if (d.moved && d.originals.length) {
           const moved = this.placeMoved(d.page, d.at ?? null, d.originals.map((m) => translate(m, d.last[0] - d.start[0], d.last[1] - d.start[1])));
           commit(tab.key, d.originals.length > 1 ? "Move markups" : "Move markup", (s) => withMarkups(s, moved));
@@ -602,7 +625,17 @@ export class Controller {
           engine()
             .selectText(tab.docId, d.page.entry.src, d.a, d.b)
             .then((res) => {
-              if (res.quads.length) this.finishCreate(textMarkup(d.kind as "highlight", d.page.entry.id, res.quads, res.text));
+              // text selection runs in reading order, so a drag over empty space can still pick up text elsewhere on the page
+              const box = normRect([d.a[0], d.a[1], d.b[0], d.b[1]]);
+              const near = (q: Quad) => Math.min(q[0], q[2], q[4], q[6]) <= box[2] + 2 && Math.max(q[0], q[2], q[4], q[6]) >= box[0] - 2 && Math.min(q[1], q[3], q[5], q[7]) <= box[3] + 2 && Math.max(q[1], q[3], q[5], q[7]) >= box[1] - 2;
+              const onText = res.quads.some(near);
+              if (res.quads.length && (onText || d.kind !== "highlight")) this.finishCreate(textMarkup(d.kind as "highlight", d.page.entry.id, res.quads, res.text));
+              else if (d.kind === "highlight" && dist(d.a, d.b) > this.tol(d.page, 6)) {
+                // away from text the highlight tool paints the dragged band, like a highlighter pen
+                const y = (d.a[1] + d.b[1]) / 2;
+                const ink = inkMarkup("highlighter", d.page.entry.id, [[Math.min(d.a[0], d.b[0]), y], [Math.max(d.a[0], d.b[0]), y]]);
+                this.finishCreate({ ...ink, style: { ...ink.style, width: Math.max(4, Math.abs(d.b[1] - d.a[1])) } }, "Highlight");
+              }
             })
             .catch(() => undefined);
         }

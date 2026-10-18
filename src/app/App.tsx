@@ -141,6 +141,7 @@ function MenuBar() {
         <C id="edit.selectAll" />
         <Sep />
         <C id="edit.lock" disabled={!sel} />
+        <C id="edit.autosize" disabled={!sel} />
         <Menu.Sub>
           <Menu.SubTrigger className="menu-item" disabled={!sel}>
             <span>Arrange</span>
@@ -207,6 +208,7 @@ function MenuBar() {
         <Sep />
         <Item label="Set page scale…" onSelect={openCalibrateDialog} disabled={!has} />
         <Item label="Label pages from title block…" onSelect={startLabelRegion} disabled={!has} />
+        <C id="doc.addBookmark" />
         <Item label="Make bookmarks from page labels" onSelect={() => tab && commit(tab.key, "Make bookmarks", (s) => ({ ...s, outline: bookmarksFromLabels(s) }))} disabled={!has} />
         <Item label="Headers, footers and watermark…" onSelect={openHeaderFooter} disabled={!has} />
         <Sep />

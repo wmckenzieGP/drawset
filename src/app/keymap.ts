@@ -12,6 +12,7 @@ import { openOcr } from "../features/ocr/OcrDialog";
 import { openRedactDialog } from "../features/redact/RedactDialog";
 import { deletePages, insertBlankPage, pagesFromSelection, rotatePages } from "../features/pages/pageOps";
 import { openPageDialog } from "../features/pages/PageDialogs";
+import { addBookmark } from "../features/viewer/BookmarksPanel";
 import { openPreferences } from "./PreferencesDialog";
 import { openShortcuts } from "./ShortcutsDialog";
 import { activeTab, focusPane, setChrome, setSnap, togglePanel, toggleSplit, useApp, type PanelId, type ToolId } from "../state/store";
@@ -60,6 +61,7 @@ export const COMMANDS: Command[] = [
   { id: "edit.delete", label: "Delete", keys: ["Delete", "Backspace"], group: "Edit", run: () => cmd.deleteSelection(), doc: true },
   { id: "edit.selectAll", label: "Select all markups on the page", keys: ["Ctrl+A"], group: "Edit", run: () => cmd.selectAllOnPage(), doc: true },
   { id: "edit.lock", label: "Lock or unlock", keys: ["Ctrl+Shift+L"], group: "Edit", run: () => cmd.toggleLocked(), doc: true },
+  { id: "edit.autosize", label: "Autosize text box", keys: ["Alt+Z"], group: "Edit", run: () => cmd.autosize(), doc: true },
   { id: "edit.bringForward", label: "Bring forward", keys: ["Ctrl+J"], group: "Edit", run: () => cmd.arrange("forward"), doc: true },
   { id: "edit.bringToFront", label: "Bring to front", keys: ["Ctrl+Shift+J"], group: "Edit", run: () => cmd.arrange("front"), doc: true },
   { id: "edit.sendBackward", label: "Send backward", keys: ["Ctrl+["], group: "Edit", run: () => cmd.arrange("backward"), doc: true },
@@ -142,6 +144,7 @@ export const COMMANDS: Command[] = [
   { id: "doc.extract", label: "Extract pages…", keys: ["Ctrl+Shift+X"], group: "Document", run: () => openPageDialog("extract"), doc: true },
   { id: "doc.flatten", label: "Flatten markups…", keys: ["Ctrl+Shift+M"], group: "Document", run: () => cmd.flatten(), doc: true },
   { id: "doc.ocr", label: "Recognise text (OCR)…", keys: ["Ctrl+Shift+O"], group: "Document", run: () => void openOcr(), doc: true },
+  { id: "doc.addBookmark", label: "Add bookmark", keys: ["Ctrl+B"], group: "Document", run: () => addBookmark(), doc: true },
   { id: "doc.security", label: "Security…", keys: ["Ctrl+L"], group: "Document", run: () => openSecurity(), doc: true },
 
   // Window
