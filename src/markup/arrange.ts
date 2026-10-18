@@ -1,5 +1,5 @@
 /** Aligning, flipping and copying formats between markups. Pure: each returns changed copies. */
-import { markupBounds } from "./appearance";
+import { markupBounds, textBoxHeight, textPadding, textWidth } from "./appearance";
 import { translate } from "./edit";
 import type { Pt, Quad, Rect } from "./geometry";
 import { nowIso, type Markup, type MarkupKind, type MarkupStyle } from "./model";
@@ -7,6 +7,38 @@ import { nowIso, type Markup, type MarkupKind, type MarkupStyle } from "./model"
 export type Alignment = "left" | "centre" | "right" | "top" | "middle" | "bottom";
 
 const union = (rs: Rect[]): Rect => [Math.min(...rs.map((r) => r[0])), Math.min(...rs.map((r) => r[1])), Math.max(...rs.map((r) => r[2])), Math.max(...rs.map((r) => r[3]))];
+
+/** What the markups cover together, as drawn. */
+export const boundsOf = (ms: Markup[]): Rect => union(ms.map(markupBounds));
+
+/** Moves markups (as one) so the middle of what they cover lands on `at`. */
+export function centredOn(ms: Markup[], at: Pt): Markup[] {
+  if (!ms.length) return ms;
+  const b = boundsOf(ms);
+  const [dx, dy] = [at[0] - (b[0] + b[2]) / 2, at[1] - (b[1] + b[3]) / 2];
+  return ms.map((m) => translate(m, dx, dy));
+}
+
+/** Shifts markups (as one) just enough that they lie within `page` (a page's bounds). */
+export function keptWithin(page: Rect, ms: Markup[]): Markup[] {
+  if (!ms.length) return ms;
+  const b = boundsOf(ms);
+  const shift = (lo: number, hi: number, plo: number, phi: number) => (hi - lo > phi - plo ? plo - lo : lo < plo ? plo - lo : hi > phi ? phi - hi : 0);
+  const dx = shift(b[0], b[2], page[0], page[2]);
+  const dy = shift(b[1], b[3], page[1], page[3]);
+  return dx || dy ? ms.map((m) => translate(m, dx, dy)) : ms;
+}
+
+/** A text box or callout sized to its text: as wide as its longest line, as tall as its lines. */
+export function fitToText(m: Markup): Markup {
+  const s = m.style;
+  const pad = textPadding(m);
+  const lines = m.contents.replace(/\r\n?/g, "\n").split("\n");
+  const w = Math.max(...lines.map((l) => textWidth(s.fontFamily, s.fontSize, l))) + 2 * pad + 1;
+  const h = textBoxHeight(s.fontFamily, s.fontSize, m.contents, w, pad);
+  const r = m.rect;
+  return { ...m, rect: [r[0], r[1], r[0] + w, r[1] + h], modified: nowIso() };
+}
 
 /**
  * Lines markups up with the outermost one (left, right, top, bottom) or with the middle of them all (centre,

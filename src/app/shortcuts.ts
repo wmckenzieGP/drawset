@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useApp } from "../state/store";
 import { useInteraction } from "../features/viewer/controller";
 import { setTool } from "./commands";
+import { expectPasteEvent, pasteEvent } from "./clipboard";
 import { commandFor } from "./keymap";
 
 export function useShortcuts() {
@@ -25,10 +26,25 @@ export function useShortcuts() {
       const c = commandFor(e);
       if (!c) return;
       if (c.doc && !useApp.getState().tabs.length) return;
+      if (c.id === "edit.paste") {
+        // the browser's paste event brings what other programs copied; it is handled below
+        expectPasteEvent();
+        return;
+      }
       e.preventDefault();
       void c.run();
     };
+    const onPaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      if (useInteraction.getState().editingId || !useApp.getState().tabs.length) return;
+      void pasteEvent(e);
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("paste", onPaste);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("paste", onPaste);
+    };
   }, []);
 }

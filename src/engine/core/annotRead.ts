@@ -1,7 +1,7 @@
 /** Reads PDF annotations into Drawset markups. Nothing here writes to the document. */
 import * as mupdf from "mupdf";
 import { apply, bboxOf, type Matrix, type Pt, type Quad, type Rect, transformRect } from "../../markup/geometry";
-import { DEFAULT_STYLE, type FontFamily, type LineEnd, LINE_ENDS, type MarkupKind, type Reply, type ReviewStatus, type RGB } from "../../markup/model";
+import { DEFAULT_STYLE, type FontFamily, type LineEnd, LINE_ENDS, type MarkupImage, type MarkupKind, type Reply, type ReviewStatus, type RGB } from "../../markup/model";
 import type { MarkupRecord } from "../types";
 import { PRIVATE_KEY } from "./annotWrite";
 import { readMeasure, safePageScale } from "./measureDict";
@@ -131,9 +131,54 @@ function kindFor(subtype: string, obj: mupdf.PDFObject, priv: Record<string, any
     case "Link":
       return "link";
     case "Stamp":
+      if (pk === "signature") return "signature";
       return pk === "image" || it === "StampImage" ? "image" : "stamp";
     default:
       return "foreign";
+  }
+}
+
+/**
+ * The picture in a picture stamp's appearance (Drawset writes it as /Im0). A JPEG comes back as it was stored;
+ * anything else as PNG, with its soft mask as the alpha channel so transparent backgrounds stay transparent.
+ */
+export function stampImage(doc: mupdf.PDFDocument, obj: mupdf.PDFObject): MarkupImage | undefined {
+  try {
+    const xo = obj.get("AP").get("N").get("Resources").get("XObject");
+    if (!xo.isDictionary()) return undefined;
+    let ref: mupdf.PDFObject | null = null;
+    xo.forEach((v) => {
+      if (!ref && name(v.get("Subtype")) === "Image") ref = v;
+    });
+    if (!ref) return undefined;
+    const x: mupdf.PDFObject = ref;
+    const img = doc.loadImage(x);
+    const [w, h] = [img.getWidth(), img.getHeight()];
+    const mask = img.getMask();
+    if (name(x.get("Filter")) === "DCTDecode" && !mask) return { data: x.readRawStream().asUint8Array().slice(), mime: "image/jpeg", width: w, height: h };
+    let pix = img.toPixmap();
+    if (pix.getColorSpace()?.getName() !== "DeviceRGB" || pix.getAlpha()) pix = pix.convertToColorSpace(mupdf.ColorSpace.DeviceRGB, false);
+    const mp = mask?.toPixmap();
+    if (!mp || mp.getWidth() !== w || mp.getHeight() !== h) return { data: pix.asPNG().slice(), mime: "image/png", width: w, height: h };
+    const out = new mupdf.Pixmap(mupdf.ColorSpace.DeviceRGB, [0, 0, w, h], true);
+    const [src, a, dst] = [pix.getPixels(), mp.getPixels(), out.getPixels()];
+    const [ss, as, ds] = [pix.getStride(), mp.getStride(), out.getStride()];
+    const an = mp.getNumberOfComponents();
+    // MuPDF's pixmaps with alpha hold premultiplied colour (the PNG writer divides it out again)
+    for (let y = 0; y < h; y++) {
+      for (let i = 0; i < w; i++) {
+        const s0 = y * ss + i * 3;
+        const d0 = y * ds + i * 4;
+        const k = a[y * as + i * an];
+        dst[d0] = Math.round((src[s0] * k) / 255);
+        dst[d0 + 1] = Math.round((src[s0 + 1] * k) / 255);
+        dst[d0 + 2] = Math.round((src[s0 + 2] * k) / 255);
+        dst[d0 + 3] = k;
+      }
+    }
+    return { data: out.asPNG().slice(), mime: "image/png", width: w, height: h };
+  } catch {
+    return undefined;
   }
 }
 
@@ -356,6 +401,13 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
         rec.style.fill = fill;
         break;
       }
+      case "image":
+      case "signature":
+        // the picture comes back out of the appearance, so the markup can still be moved, resized and copied anywhere
+        rec.image = stampImage(page._doc, obj);
+        if (!rec.image) rec.keepAppearance = true;
+        if (kind === "signature" && typeof priv.caption === "string") rec.caption = priv.caption;
+        break;
       case "stamp":
         if (typeof priv.stampId === "string") {
           rec.stampId = priv.stampId;

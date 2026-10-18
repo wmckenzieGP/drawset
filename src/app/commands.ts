@@ -1,16 +1,17 @@
 /** Commands shared by menus, toolbar and keyboard shortcuts. */
 import { cloneMarkup, relinkGroups } from "../markup/edit";
-import { aligned, canFlip, flipped, type Alignment } from "../markup/arrange";
-import { textBoxHeight, textPadding, textWidth } from "../markup/appearance";
-import { newId, nowIso, type Markup, type ReviewStatus } from "../markup/model";
+import { copySelection, pasteFromMenu, pasteMarkups, pointerSpot } from "./clipboard";
+import { aligned, canFlip, fitToText, flipped, type Alignment } from "../markup/arrange";
+export { fitToText };
+import { KIND_LABELS, newId, nowIso, type Markup, type ReviewStatus } from "../markup/model";
+import { useInteraction } from "../features/viewer/controller";
+import { textMarkup } from "../features/viewer/create";
 import { closeTab, openWithDialog, saveActive, saveCopyOf, saveTab } from "../state/documents";
 import { chooseImageTool } from "./images";
 import { activeTab, commit, isContinuous, flash, redo, setView, undo, updateTab, useApp, usePainter, withGroups, withMarkups, showPanel, type PageMode, type PanelId, type Rotation, type ToolId } from "../state/store";
 import { jumpTo } from "../features/links/navigate";
 import { pageStep, shownFrom } from "../features/viewer/layout";
 import { clampScale } from "../features/viewer/Viewer";
-
-let clipboard: { docId: string; markups: Markup[] } | null = null;
 
 const MEASURE_TOOLS = new Set<ToolId>(["calibrate", "length", "polylength", "area", "cutout", "perimeter", "count", "angle", "dimension", "radius", "diameter", "volume"]);
 
@@ -67,20 +68,14 @@ export const cmd = {
       if (!ids.length) return;
       commit(k, ids.length > 1 ? "Delete markups" : "Delete markup", (s) => withMarkups(s, [], ids));
     }),
-  copy: () => {
-    const t = activeTab();
-    if (!t) return;
-    const ms = t.selection.map((id) => t.state.markups[id]).filter(Boolean);
-    if (ms.length) clipboard = { docId: t.docId, markups: ms };
-    else if (t.textSelection?.text) navigator.clipboard?.writeText(t.textSelection.text).catch(() => undefined);
-  },
+  copy: () => void copySelection(),
   cut: () => {
-    cmd.copy();
-    cmd.deleteSelection();
+    if (activeTab()?.selection.length && copySelection()) cmd.deleteSelection();
   },
   /** Pastes at the same spot on the current page. */
-  pasteInPlace: () => pasteOnto(false),
-  paste: () => pasteOnto(true),
+  pasteInPlace: () => pasteMarkups(null, true),
+  /** Pastes centred on the pointer when it is over a page (Ctrl+V itself goes through the paste event). */
+  paste: () => void pasteFromMenu(pointerSpot()),
   toggleLocked: () => {
     const t = activeTab();
     if (!t) return;
@@ -180,6 +175,38 @@ export const cmd = {
       commit(k, "Ungroup", (s) => withMarkups(s, ms.map((m) => ({ ...m, group: undefined, modified: now }))));
       updateTab(k, (x) => ({ ...x, selection: ids }));
     }),
+  /** Opens the Properties panel, putting the cursor in one of its fields (the comment, or the reply box). */
+  showProperties: (focus: "prop-comment" | "reply-input" = "prop-comment") => {
+    showPanel("properties");
+    // the panel renders on the next frame
+    requestAnimationFrame(() => requestAnimationFrame(() => (document.querySelector(`[data-testid="${focus}"]`) as HTMLElement | null)?.focus()));
+  },
+  /** Starts typing into a text box or callout. */
+  editText: (id: string) =>
+    withActive((k) => {
+      const m = activeTab()!.state.markups[id];
+      if (!m || m.locked || (m.kind !== "textbox" && m.kind !== "callout")) return;
+      updateTab(k, (x) => ({ ...x, selection: [id] }));
+      useInteraction.setState({ editingId: id });
+    }),
+  /** Makes the selected markups' format the default for new markups of their kinds. */
+  setAsDefault: () => {
+    const t = activeTab();
+    if (!t) return;
+    const ms = t.selection.map((id) => t.state.markups[id]).filter((m) => m && m.kind !== "foreign" && m.kind !== "image" && m.kind !== "signature");
+    if (!ms.length) return;
+    useApp.setState((s) => ({ tools: { ...s.tools, defaults: { ...s.tools.defaults, ...Object.fromEntries(ms.map((m) => [m.kind, { ...m.style }])) } } }));
+    flash(ms.length === 1 ? `New ${KIND_LABELS[ms[0].kind].toLowerCase()} markups will look like this one.` : "New markups will look like these.");
+  },
+  /** Highlights, underlines or strikes through the selected PDF text. */
+  markText: (kind: "highlight" | "underline" | "strikeout") =>
+    withActive((k) => {
+      const ts = activeTab()!.textSelection;
+      if (!ts?.quads.length) return;
+      const m = textMarkup(kind, ts.pageId, ts.quads, ts.text);
+      commit(k, KIND_LABELS[kind], (s) => withMarkups(s, [m]));
+      updateTab(k, (x) => ({ ...x, selection: [m.id], textSelection: null }));
+    }),
   duplicate: () =>
     withActive((k) => {
       const t = activeTab()!;
@@ -228,30 +255,6 @@ export const cmd = {
   },
 };
 
-function pasteOnto(offset: boolean) {
-  withActive((k) => {
-    if (!clipboard) return;
-    const t = activeTab()!;
-    const page = t.state.pages[t.currentPage];
-    if (!page) return;
-    const sameDoc = clipboard.docId === t.docId;
-    const author = useApp.getState().author;
-    const source = clipboard.markups.filter((m) => sameDoc || !(m.keepAppearance || m.kind === "foreign"));
-    const originals = source.filter((m) => m.kind !== "foreign");
-    const copies = relinkGroups(
-      originals,
-      originals.map((m) => {
-        const samePage = m.pageId === page.id;
-        return cloneMarkup(m, newId(), page.id, offset && samePage ? 12 : 0, offset && samePage ? 12 : 0, author);
-      }),
-    );
-    if (!copies.length) return;
-    commit(k, "Paste", (s) => withMarkups(s, copies));
-    updateTab(k, (x) => ({ ...x, selection: copies.map((c) => c.id) }));
-    clipboard = { ...clipboard, markups: copies };
-  });
-}
-
 let hiddenPanels: { left: PanelId | null; right: PanelId | null } = { left: null, right: null };
 
 /** The markups object reordered (drawing order is insertion order, per page). */
@@ -278,13 +281,3 @@ export function arranged(markups: Record<string, Markup>, sel: Set<string>, how:
   return out;
 }
 
-/** A text box or callout sized to its text: as wide as its longest line, as tall as its lines. */
-export function fitToText(m: Markup): Markup {
-  const s = m.style;
-  const pad = textPadding(m);
-  const lines = m.contents.replace(/\r\n?/g, "\n").split("\n");
-  const w = Math.max(...lines.map((l) => textWidth(s.fontFamily, s.fontSize, l))) + 2 * pad + 1;
-  const h = textBoxHeight(s.fontFamily, s.fontSize, m.contents, w, pad);
-  const r = m.rect;
-  return { ...m, rect: [r[0], r[1], r[0] + w, r[1] + h], modified: nowIso() };
-}

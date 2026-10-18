@@ -16,8 +16,10 @@ import { CalibrateDialog, openCalibrateDialog } from "../features/measure/Calibr
 import { useEffect, useState } from "react";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { activeTab, commit, isDirty, movePanel, PANELS, togglePanel, useApp, type DocTab, type PanelId, type Side, type SplitState } from "../state/store";
-import { COMMANDS, commandById, keysOf } from "./keymap";
+import { COMMANDS, keysOf } from "./keymap";
 import { ShortcutsDialog } from "./ShortcutsDialog";
+import { SignatureDialog } from "../features/signature/SignatureDialog";
+import { C, Item, Sep } from "./menuItems";
 import { NavigationBar } from "./NavigationBar";
 import { closeTab, openFiles, openPath } from "../state/documents";
 import { clearRecent, desktop, fileToOpened, isDesktop, recentFiles } from "../platform/host";
@@ -36,15 +38,6 @@ import { cmd } from "./commands";
 import { Icon } from "./icons";
 import { useShortcuts } from "./shortcuts";
 
-function Item({ label, shortcut, onSelect, disabled }: { label: string; shortcut?: string; onSelect: () => void; disabled?: boolean }) {
-  return (
-    <Menu.Item className="menu-item" onSelect={onSelect} disabled={disabled}>
-      <span>{label}</span>
-      {shortcut && <span className="menu-shortcut">{shortcut}</span>}
-    </Menu.Item>
-  );
-}
-
 function TopMenu({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <Menu.Root modal={false}>
@@ -59,8 +52,6 @@ function TopMenu({ label, children }: { label: string; children: React.ReactNode
     </Menu.Root>
   );
 }
-
-const Sep = () => <Menu.Separator className="menu-sep" />;
 
 function RecentMenu() {
   const [items, setItems] = useState<string[]>([]);
@@ -85,13 +76,6 @@ function RecentMenu() {
       </Menu.Portal>
     </Menu.Sub>
   );
-}
-
-/** A menu item for a command in the key map: its label and shortcut come from there. */
-function C({ id, label, disabled, checked }: { id: string; label?: string; disabled?: boolean; checked?: boolean }) {
-  const c = commandById.get(id)!;
-  const has = useApp((s) => s.tabs.length > 0);
-  return <Item label={`${checked ? "✓ " : ""}${label ?? c.label}`} shortcut={c.keys[0]?.replace(/Plus$/, "+").replace(/Minus$/, "-")} onSelect={() => void c.run()} disabled={disabled || (c.doc && !has)} />;
 }
 
 const TOOL_GROUPS = ["Select", "Markup", "Measure", "Redact"];
@@ -513,6 +497,7 @@ export function App() {
       <HeaderFooterDialog />
       <OcrDialog />
       <LinkDialog />
+      <SignatureDialog />
       <AskDialog />
       <SecurityDialog />
       <RecoveryDialog />

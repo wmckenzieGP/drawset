@@ -7,6 +7,9 @@ import { computeLayout, pageByIndex, PAGE_GAP, pageStep, shownFrom, visibleRange
 import { drawOverlay, addBitmapListener } from "./overlay";
 import { previewScale, renderCache, TILE } from "./renderCache";
 import { TextEditor } from "./TextEditor";
+import { useCursor } from "./cursor";
+import { ViewerMenu, type MenuAt } from "./ViewerMenu";
+import { dropImages } from "../../app/clipboard";
 
 export const MIN_SCALE = 0.02;
 export const MAX_SCALE = 64;
@@ -348,6 +351,17 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
     return () => el.removeEventListener("wheel", onWheel);
   }, [zoomTo]);
 
+  // right-click menus
+  const [menu, setMenu] = useState<MenuAt | null>(null);
+  const menuOpen = useRef(false);
+  menuOpen.current = !!menu;
+  const onContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (e.target instanceof HTMLTextAreaElement) return;
+    const target = controller.contextMenu(e.nativeEvent);
+    setMenu(target ? { x: e.clientX, y: e.clientY, target } : null);
+  };
+
   // pointer handling
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.target instanceof HTMLTextAreaElement) return;
@@ -370,7 +384,9 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
       // with two panes open, keys go to the pane in use
       if (pane && useApp.getState().split?.focus !== pane) return;
       const target = e.target as HTMLElement;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable)) return;
+      // keys in an open right-click menu are the menu's, and Enter on a button presses it
+      if (menuOpen.current || (target?.tagName === "BUTTON" && (e.key === "Enter" || e.key === " "))) return;
       if (e.code === "Space" && !useInteraction.getState().spaceDown) {
         useInteraction.setState({ spaceDown: true, cursor: "grab" });
         e.preventDefault();
@@ -425,7 +441,17 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onDoubleClick={(e) => controller.doubleClick(e.nativeEvent)}
-        onContextMenu={(e) => e.preventDefault()}
+        onContextMenu={onContextMenu}
+        onDrop={(e) => {
+          // pictures dropped on a page become image markups there (PDFs go on to the window, which opens them)
+          const images = [...e.dataTransfer.files].filter((f) => /^image\/(png|jpeg|gif|bmp|webp)$/.test(f.type));
+          const at = images.length ? controller.pointAt(e) : null;
+          if (!at) return;
+          e.preventDefault();
+          if (pane) focusPane(pane);
+          void dropImages(images, at);
+        }}
+        onPointerLeave={() => useCursor.getState().tabKey === tab.key && useCursor.setState({ tabKey: null, pageId: null, pt: null })}
         style={{ cursor }}
         title={hoverTitle || undefined}
       >
@@ -438,6 +464,7 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
       </div>
       <canvas ref={multiplyRef} className="overlay overlay-multiply" width={size.w * dpr} height={size.h * dpr} style={{ width: size.w, height: size.h }} />
       <canvas ref={normalRef} className="overlay" width={size.w * dpr} height={size.h * dpr} style={{ width: size.w, height: size.h }} />
+      <ViewerMenu tab={tab} menu={menu} controller={controller} onClose={() => setMenu(null)} />
     </div>
   );
 }

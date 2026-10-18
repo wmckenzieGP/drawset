@@ -1562,3 +1562,135 @@ input.small {
 .panel-title .painter-btn {
   margin-left: auto;
 }
+
+/* signatures */
+.dialog.signature-dialog {
+  width: min(600px, calc(100vw - 32px));
+  max-height: 94vh;
+  overflow-y: auto;
+}
+.sig-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.sig-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.sig-item.current {
+  border-color: var(--accent);
+}
+.sig-item img {
+  height: 40px;
+  max-width: 180px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 3px;
+  padding: 2px 6px;
+}
+.sig-item .sig-name {
+  flex: 1;
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  overflow: hidden;
+  margin: 6px 0 10px;
+}
+.seg-btn {
+  background: var(--bg-3);
+  border: none;
+  padding: 4px 14px;
+  cursor: pointer;
+}
+.seg-btn + .seg-btn {
+  border-left: 1px solid var(--line);
+}
+.seg-btn.active {
+  background: var(--accent);
+  color: #1a1206;
+  font-weight: 600;
+}
+.sig-pad-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.sig-pad {
+  background: #fff;
+  border-radius: 6px;
+  touch-action: none;
+  cursor: crosshair;
+  max-width: 100%;
+}
+.sig-pad-tools {
+  display: flex;
+  gap: 6px;
+}
+.sig-fonts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.sig-font {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 22px;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.sig-font.active {
+  border-color: var(--accent);
+}
+.sig-picture {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+  align-items: flex-start;
+}
+.sig-preview {
+  min-height: 90px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: repeating-conic-gradient(#fff 0% 25%, #e8e8e8 0% 50%) 50% / 16px 16px;
+  border-radius: 6px;
+}
+.sig-preview .muted {
+  color: #555;
+  padding: 10px;
+}
+.sig-preview img {
+  max-height: 140px;
+  max-width: 100%;
+}
+.sig-colours {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.small-print {
+  font-size: 12px;
+  margin: 8px 0 0;
+}
+.pad-x {
+  margin: 0 12px;
+}

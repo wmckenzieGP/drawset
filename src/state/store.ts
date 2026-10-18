@@ -115,6 +115,8 @@ export type ToolId =
   | "cloudplus"
   /** Copies the format of `usePainter`'s source onto clicked markups. */
   | "painter"
+  /** Rubs out parts of pen and highlighter strokes. */
+  | "inkEraser"
   | MarkupKind;
 
 export interface ToolState {
@@ -292,6 +294,7 @@ export const KIND_DEFAULTS: Partial<Record<MarkupKind, Partial<MarkupStyle>>> = 
   note: { color: [1, 0.82, 0.2] },
   stamp: { color: null },
   image: { color: null },
+  signature: { color: null, textColor: [0.1, 0.1, 0.1] },
   length: { color: [0.1, 0.35, 0.85], width: 1, lineStart: "Butt", lineEnd: "Butt", fontSize: 10 },
   polylength: { color: [0.1, 0.35, 0.85], width: 1, lineStart: "None", lineEnd: "None", fontSize: 10 },
   area: { color: [0.1, 0.5, 0.2], fill: [0.78, 0.93, 0.8], opacity: 1, width: 1, fontSize: 10 },
@@ -476,6 +479,22 @@ export function commit(key: string, label: string, fn: (s: DocState) => DocState
     const markups = next.markups;
     return { ...t, state: next, undo, redo: [], selection: t.selection.filter((id) => markups[id]) };
   });
+}
+
+/**
+ * For edits that build up while the pointer is held (rubbing out strokes): `fn` changes the document straight
+ * away, without an undo step; `settle` then records one step back to `before`.
+ */
+export function changeLive(key: string, fn: (s: DocState) => DocState) {
+  lastCoalesce = null;
+  updateTab(key, (t) => {
+    const next = fn(t.state);
+    if (next === t.state) return t;
+    return { ...t, state: next, selection: t.selection.filter((id) => next.markups[id]) };
+  });
+}
+export function settleLive(key: string, label: string, before: DocState) {
+  updateTab(key, (t) => (t.state === before ? t : { ...t, undo: [...t.undo, { label, state: before }].slice(-MAX_UNDO), redo: [] }));
 }
 
 export function undo(key: string) {

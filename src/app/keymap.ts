@@ -17,6 +17,7 @@ import { openPreferences } from "./PreferencesDialog";
 import { openShortcuts } from "./ShortcutsDialog";
 import { activeTab, focusPane, setChrome, setSnap, togglePanel, toggleSplit, useApp, type PanelId, type ToolId } from "../state/store";
 import { cmd, setTool } from "./commands";
+import { signWith } from "../features/signature/signatures";
 
 export interface Command {
   id: string;
@@ -119,6 +120,7 @@ export const COMMANDS: Command[] = [
   tool("note", "Note", ["N"], "Markup"),
   tool("pen", "Pen", ["P"], "Markup"),
   tool("highlighter", "Highlighter (freehand)", [], "Markup"),
+  tool("inkEraser", "Eraser (pen strokes)", [], "Markup"),
   tool("highlight", "Highlight text", ["H"], "Markup"),
   tool("underline", "Underline", ["U"], "Markup"),
   tool("strikeout", "Strikethrough", ["D"], "Markup"),
@@ -133,6 +135,7 @@ export const COMMANDS: Command[] = [
   tool("arc", "Arc", ["Shift+C"], "Markup"),
   tool("dimension", "Dimension", ["Shift+L"], "Markup"),
   tool("stamp", "Stamp", ["S"], "Markup"),
+  { id: "tool.signature", label: "Signature", keys: [], group: "Markup", run: () => signWith(), doc: true },
   { id: "tool.image", label: "Image", keys: ["I"], group: "Markup", run: () => cmd.chooseImage(), doc: true },
   tool("link", "Hyperlink", ["Shift+H"], "Markup"),
   // measure

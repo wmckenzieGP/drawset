@@ -6,6 +6,7 @@ import { openPrintDialog } from "../features/print/PrintDialog";
 import { cmd, setTool } from "./commands";
 import { Icon } from "./icons";
 import { chooseImageTool } from "./images";
+import { openSignatures, signWith, useSignatures } from "../features/signature/signatures";
 
 /** Tool buttons: [tool, tip, icon]. The tip gets the tool's key from the key map. */
 const GROUPS: [ToolId, string, string][][] = [
@@ -19,8 +20,9 @@ const GROUPS: [ToolId, string, string][][] = [
     ["textbox", "Text box", "textbox"],
     ["callout", "Callout: press at the point, release where the text goes", "callout"],
     ["note", "Note", "note"],
-    ["pen", "Pen", "pen"],
+    ["pen", "Pen: draw freehand (strokes drawn close together become one markup)", "pen"],
     ["highlighter", "Highlighter (freehand)", "highlighter"],
+    ["inkEraser", "Eraser: rub out parts of pen and highlighter strokes", "inkEraser"],
     ["highlight", "Highlight text", "highlight"],
     ["underline", "Underline", "underline"],
     ["strikeout", "Strikethrough", "strikeout"],
@@ -60,6 +62,34 @@ const withKey = (tip: string, id: string) => {
   const k = keysOf(id);
   return k ? `${tip.replace(/:.*$/, "")} (${k})${tip.includes(":") ? tip.slice(tip.indexOf(":")) : ""}` : tip;
 };
+
+/** Signature: pick one of your signatures to place, or make one. */
+function SignatureButton({ tool, disabled }: { tool: ToolId; disabled: boolean }) {
+  const list = useSignatures((s) => s.list);
+  const current = useSignatures((s) => s.current);
+  return (
+    <Menu.Root modal={false}>
+      <Menu.Trigger className={`tb ${tool === "signature" ? "active" : ""}`} title="Signature: sign with your handwritten signature" disabled={disabled} data-testid="tool-signature">
+        <Icon name="signature" />
+        <span className="tb-caret">▾</span>
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Content className="menu" align="start" sideOffset={2}>
+          {list.map((s) => (
+            <Menu.Item key={s.id} className="menu-item" onSelect={() => signWith(s.id)} data-testid="sig-menu-item">
+              <span>Sign as {s.name}</span>
+              {current === s.id && <span className="menu-shortcut">✓</span>}
+            </Menu.Item>
+          ))}
+          {list.length > 0 && <Menu.Separator className="menu-sep" />}
+          <Menu.Item className="menu-item" onSelect={openSignatures} data-testid="sig-menu-manage">
+            {list.length ? "New or delete signatures…" : "Create your signature…"}
+          </Menu.Item>
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu.Root>
+  );
+}
 
 export function Toolbar() {
   const tool = useApp((s) => s.tools.tool);
@@ -126,6 +156,7 @@ export function Toolbar() {
       <button className={`tb ${tool === "image" ? "active" : ""}`} title={withKey("Image", "tool.image")} onClick={() => chooseImageTool("image")} disabled={disabled} data-testid="tool-image">
         <Icon name="image" />
       </button>
+      <SignatureButton tool={tool} disabled={disabled} />
       <span className="tb-spacer" />
       <button className={`tb ${bottomPanel ? "active" : ""}`} title={withKey("Markups List", "panel.markups")} onClick={() => useApp.setState((s) => ({ bottomPanel: !s.bottomPanel }))} disabled={disabled} data-testid="tb-markups-list">
         <Icon name="list" />

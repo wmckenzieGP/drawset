@@ -6,22 +6,29 @@ import { markupFromTool } from "../toolchest/chest";
 import { contentIndex, snapPoint, type SnapKind } from "./snap";
 import { create } from "zustand";
 import { engine } from "../../engine/client";
-import { apply, normRect, rectPoints, snapAngle, snapSquare, type Pt, type Quad, type Rect, dist, rectContains, transformRect } from "../../markup/geometry";
+import { apply, bboxOf, inflate, normRect, quadPoints, rectPoints, snapAngle, snapSquare, type Pt, type Quad, type Rect, dist, rectContains, transformRect } from "../../markup/geometry";
 import { markupBounds } from "../../markup/appearance";
 import { clickField } from "../forms/forms";
 import { openLinkDialog } from "../links/LinkDialog";
 import { describeTarget, followLink } from "../links/navigate";
 import { canResize, cloneMarkup, hitTest, relinkGroups, scaleBetween, setVertex, translate, vertexHandles, withDerivedRect } from "../../markup/edit";
-import { KIND_LABELS, newId, nowIso, type Markup, type MarkupKind } from "../../markup/model";
-import { commit, flash, updateTab, useApp, usePainter, withGroups, withMarkups, type DocTab, type ToolId } from "../../state/store";
-import { boxMarkup, calloutAt, imageAt, inkMarkup, measureAt, noteAt, stampAt, textBoxAt, textMarkup, vertexMarkup } from "./create";
+import { formatDate, KIND_LABELS, newId, nowIso, type Markup, type MarkupKind } from "../../markup/model";
+import { changeLive, commit, flash, settleLive, showPanel, updateTab, useApp, usePainter, withGroups, withMarkups, type DocState, type DocTab, type ToolId } from "../../state/store";
+import { eraseStrokes, simplifyStroke } from "../../markup/ink";
+import { boxMarkup, calloutAt, imageAt, inkMarkup, measureAt, noteAt, signatureAt, stampAt, textBoxAt, textMarkup, vertexMarkup } from "./create";
 import { dimensionLine, isMeasure } from "../../markup/measure";
-import { paintedStyle } from "../../markup/arrange";
+import { keptWithin, paintedStyle } from "../../markup/arrange";
+import { useCursor } from "./cursor";
+export { useCursor };
 import { pageAt, type Layout, type PageLayout } from "./layout";
 import { markupsInRect } from "./markupIndex";
 
-/** Where the pointer is, in page space, for the status bar. */
-export const useCursor = create<{ pageId: string | null; pt: Pt | null }>(() => ({ pageId: null, pt: null }));
+/** What a right-click landed on, for the menu it opens. `at` is the page and the point clicked (page space). */
+export type ContextTarget =
+  | { t: "drawing"; kind: string; points: number }
+  | { t: "markup"; at: { pageId: string; pt: Pt }; ids: string[] }
+  | { t: "text"; at: { pageId: string; pt: Pt } }
+  | { t: "page"; at: { pageId: string; pt: Pt }; index: number };
 
 export const useInteraction = create<{ editingId: string | null; cursor: string; spaceDown: boolean; title: string }>(() => ({ editingId: null, cursor: "default", spaceDown: false, title: "" }));
 
@@ -49,7 +56,8 @@ type DragState =
   | { t: "line"; kind: "line" | "arrow" | "length" | "calibrate" | "radius" | "diameter"; page: PageLayout; a: Pt; b: Pt }
   /** `plus`: the cloud a Cloud+ callout belongs to; the text is placed with a click after the cloud is drawn. */
   | { t: "callout"; page: PageLayout; tip: Pt; b: Pt; plus?: Markup }
-  | { t: "ink"; kind: "pen" | "highlighter"; page: PageLayout; pts: Pt[] }
+  | { t: "ink"; kind: "pen" | "highlighter"; page: PageLayout; pts: Pt[]; startedAt: number }
+  | { t: "inkErase"; page: PageLayout; last: Pt; before: DocState }
   | { t: "poly"; kind: PolyKind; page: PageLayout; pts: Pt[]; cursor: Pt; downAt: Pt | null }
   | { t: "textsel"; kind: "text" | "highlight" | "underline" | "strikeout"; page: PageLayout; a: Pt; b: Pt; quads: Quad[]; text: string; seq: number };
 
@@ -64,8 +72,14 @@ export const useCalibrationPick = create<{ pick: { pageId: string; a: Pt; b: Pt 
 
 /** Tools whose points snap. Freehand, text and zoom tools do not. */
 const SNAP_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "textbox", "callout", "note", "stamp", "image", "length", "polylength", "area", "perimeter", "count", "angle", "calibrate", "cutout", "redact", "erase", "chest", "link", "cloudplus", "arc", "dimension", "volume", "radius", "diameter"]);
-const BOX_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "textbox", "stamp", "image", "zoom", "redact", "erase", "labelregion", "link", "cloudplus"]);
+const BOX_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "textbox", "stamp", "image", "signature", "zoom", "redact", "erase", "labelregion", "link", "cloudplus"]);
+/** Tools that place a ready-made markup: it follows the pointer until the click that places it. */
+const GHOST_TOOLS = new Set<ToolId>(["stamp", "signature"]);
 const TEXT_TOOLS = new Set<ToolId>(["text", "highlight", "underline", "strikeout"]);
+/** A pen stroke started within this long of the last one joins the same markup. */
+export const INK_JOIN_MS = 1500;
+/** The ink eraser's radius in screen pixels. */
+const ERASER_PX = 8;
 
 export class Controller {
   drag: DragState = { t: "idle" };
@@ -171,14 +185,23 @@ export class Controller {
   preview(): { page: PageLayout; m: Markup; with?: Markup[] } | null {
     const d = this.drag;
     switch (d.t) {
+      case "idle": {
+        // a stamp or signature waiting to be placed follows the pointer, faintly
+        if (!GHOST_TOOLS.has(this.tool)) return null;
+        const c = useCursor.getState();
+        const page = c.pt && c.tabKey === this.host.tab()?.key ? this.host.layout().pages.find((pl) => pl.entry.id === c.pageId) : undefined;
+        if (!page || !c.pt) return null;
+        const m = this.tool === "stamp" ? stampAt(page.entry.id, c.pt, null) : signatureAt(page.entry.id, c.pt, null);
+        return m ? { page, m: { ...m, style: { ...m.style, opacity: m.style.opacity * 0.55 } } } : null;
+      }
       case "move":
         // a copy being dragged shows where it will go; the original stays put
         return d.copy && d.moved && d.originals[0] ? { page: d.page, m: translate(d.originals[0], d.last[0] - d.start[0], d.last[1] - d.start[1]) } : null;
       case "box": {
         if (!d.moved || d.kind === "zoom" || d.kind === "labelregion") return null;
         if (d.kind === "stamp") return { page: d.page, m: stampAt(d.page.entry.id, d.a, d.b) };
-        if (d.kind === "image") {
-          const m = imageAt(d.page.entry.id, d.a, d.b);
+        if (d.kind === "image" || d.kind === "signature") {
+          const m = d.kind === "image" ? imageAt(d.page.entry.id, d.a, d.b) : signatureAt(d.page.entry.id, d.a, d.b);
           return m ? { page: d.page, m } : null;
         }
         if (d.kind === "textbox") return { page: d.page, m: textBoxAt(d.page.entry.id, d.a, d.b) };
@@ -222,6 +245,52 @@ export class Controller {
   }
 
   // ---------- creating ----------
+
+  /** The freehand markup the last stroke went into, and when that stroke ended. */
+  private lastInk: { m: Markup; at: number } | null = null;
+
+  /**
+   * Adds a pen or highlighter stroke. A stroke started soon after the last one (on the same page, with the same
+   * tool) joins that markup, so handwriting and sketches stay one markup; each stroke still undoes on its own.
+   * Freehand tools stay in hand until Esc or another tool.
+   */
+  private addStroke(tab: DocTab, d: Extract<DragState, { t: "ink" }>) {
+    const pageId = d.page.entry.id;
+    // a click makes a dot
+    const pts = d.pts.length > 1 ? simplifyStroke(d.pts, this.tol(d.page, 0.35)) : [d.pts[0], [d.pts[0][0] + 0.01, d.pts[0][1]] as Pt];
+    const prev = this.lastInk;
+    const current = prev ? tab.state.markups[prev.m.id] : undefined;
+    if (prev && current === prev.m && current.kind === d.kind && current.pageId === pageId && d.startedAt - prev.at < INK_JOIN_MS) {
+      const m = { ...current, inks: [...current.inks, pts], rect: bboxOf([...current.inks.flat(), ...pts]), modified: nowIso() };
+      commit(tab.key, `Add ${KIND_LABELS[d.kind].toLowerCase()} stroke`, (s) => withMarkups(s, [m]));
+      this.lastInk = { m, at: performance.now() };
+      return;
+    }
+    const m = inkMarkup(d.kind, pageId, pts);
+    commit(tab.key, `Add ${KIND_LABELS[d.kind]}`, (s) => withMarkups(s, [m]));
+    this.lastInk = { m, at: performance.now() };
+  }
+
+  /** Rubs out freehand strokes along the eraser's path to `p`. */
+  private eraseTo(page: PageLayout, p: Pt) {
+    const tab = this.host.tab();
+    const d = this.drag;
+    if (!tab || d.t !== "inkErase") return;
+    const from = d.last;
+    d.last = p;
+    const r = this.tol(page, ERASER_PX);
+    const near = markupsInRect(tab.state.markups, page.entry.id, inflate(bboxOf([from, p]), r + 50));
+    const { changed, removed } = eraseStrokes(near, from, p, r);
+    if (changed.length || removed.length) changeLive(tab.key, (s) => withMarkups(s, changed, removed));
+  }
+
+  /** The eraser's outline under the pointer (page space), drawn by the overlay. */
+  eraserRing(): { pageId: string; pt: Pt; r: number } | null {
+    if (this.tool !== "inkEraser") return null;
+    const c = useCursor.getState();
+    const page = c.pageId ? this.host.layout().pages.find((pl) => pl.entry.id === c.pageId) : undefined;
+    return page && c.pt && c.tabKey === this.host.tab()?.key ? { pageId: page.entry.id, pt: c.pt, r: this.tol(page, ERASER_PX) } : null;
+  }
 
   private finishCreate(m: Markup, label?: string, edit = true, others: Markup[] = []) {
     const tab = this.host.tab();
@@ -355,7 +424,11 @@ export class Controller {
     } else if (tool === "callout") {
       this.drag = { t: "callout", page, tip: p, b: p };
     } else if (tool === "pen" || tool === "highlighter") {
-      this.drag = { t: "ink", kind: tool, page, pts: [p] };
+      this.drag = { t: "ink", kind: tool, page, pts: [p], startedAt: performance.now() };
+      if (tab.selection.length) this.setSelection([]);
+    } else if (tool === "inkEraser") {
+      this.drag = { t: "inkErase", page, last: p, before: tab.state };
+      this.eraseTo(page, p);
     } else if (POLY_TOOLS.has(tool)) {
       if (tool === "cutout" && !this.cutoutTarget(tab, page.entry.id)) {
         flash("Select an area measurement on this page first, then draw the cutout inside it.", "error");
@@ -420,7 +493,7 @@ export class Controller {
     }
     const c = this.contentPoint(e);
     const under = pageAt(this.host.layout(), c[0], c[1]);
-    useCursor.setState(under ? { pageId: under.entry.id, pt: this.toPage(under, c) } : { pageId: null, pt: null });
+    useCursor.setState(under ? { tabKey: this.host.tab()?.key ?? null, pageId: under.entry.id, pt: this.toPage(under, c) } : { tabKey: null, pageId: null, pt: null });
     if (d.t === "idle") {
       this.updateHover(c);
       // show what a click would snap to
@@ -428,7 +501,7 @@ export class Controller {
       const page = SNAP_TOOLS.has(this.tool) ? pageAt(this.host.layout(), c[0], c[1]) : null;
       if (page) this.snapAt(page, this.toPage(page, c), e);
       else this.snapMark = null;
-      if (had || this.snapMark) this.host.redraw();
+      if (had || this.snapMark || this.tool === "inkEraser" || GHOST_TOOLS.has(this.tool)) this.host.redraw();
       return;
     }
     const p = this.toPage(d.page, c);
@@ -448,7 +521,7 @@ export class Controller {
         if (d.handle.includes("e")) x1 = p[0];
         if (d.handle.includes("n")) y0 = p[1];
         if (d.handle.includes("s")) y1 = p[1];
-        if (e.shiftKey && d.handle.length === 2) {
+        if ((e.shiftKey || d.original.kind === "signature") && d.handle.length === 2) {
           const ratio = (f[2] - f[0]) / (f[3] - f[1] || 1);
           const w = Math.abs(x1 - x0);
           const h = w / ratio;
@@ -486,10 +559,18 @@ export class Controller {
         if (d.plus) d.tip = nearestOnOutline(d.plus.points, d.b);
         break;
       case "ink": {
-        const last = d.pts[d.pts.length - 1];
-        if (dist(last, p) > this.tol(d.page, 1.5)) d.pts.push(p);
+        // every position the pointer passed through, not just one per frame, so quick strokes stay smooth
+        const evs = typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : [];
+        const min = this.tol(d.page, 0.75);
+        for (const ev of evs.length ? evs : [e]) {
+          const q = evs.length ? this.toPage(d.page, this.contentPoint(ev)) : p;
+          if (dist(d.pts[d.pts.length - 1], q) > min) d.pts.push(q);
+        }
         break;
       }
+      case "inkErase":
+        this.eraseTo(d.page, p);
+        break;
       case "poly": {
         const last = d.pts[d.pts.length - 1];
         d.cursor = e.shiftKey ? snapAngle(last, p) : this.snapAt(d.page, p, e);
@@ -542,7 +623,10 @@ export class Controller {
         if (hit?.kind === "link" && hit.link && !tab!.selection.includes(hit.id)) {
           cursor = "pointer";
           title = [hit.contents, describeTarget(tab!, hit.link)].filter(Boolean).join("\n");
-        } else if (hit) cursor = "move";
+        } else if (hit) {
+          cursor = hit.locked ? "default" : "move";
+          title = hoverText(hit);
+        }
       }
     }
     if (useInteraction.getState().cursor !== cursor || useInteraction.getState().title !== title) useInteraction.setState({ cursor, title });
@@ -621,6 +705,11 @@ export class Controller {
           if (m) this.finishCreate(m);
           break;
         }
+        if (d.kind === "signature") {
+          const m = signatureAt(pid, d.a, d.moved ? d.b : null);
+          if (m) this.finishCreate(m);
+          break;
+        }
         if (!d.moved) break;
         if (d.kind === "cloudplus") {
           // now place the text: the leader follows the pointer until the next click
@@ -646,7 +735,10 @@ export class Controller {
         break;
       }
       case "ink":
-        if (d.pts.length > 1) this.finishCreate(inkMarkup(d.kind, d.page.entry.id, d.pts));
+        this.addStroke(tab, d);
+        break;
+      case "inkErase":
+        settleLive(tab.key, "Erase strokes", d.before);
         break;
       case "textsel":
         if (d.kind === "text") {
@@ -675,6 +767,48 @@ export class Controller {
     this.host.redraw();
   }
 
+  /**
+   * A right-click: a markup is selected (with its group, or the selection it is part of) and gets the markup menu;
+   * selected PDF text gets the text menu; the bare page gets the page menu. Mid-way through a polyline or polygon
+   * the menu finishes or steps back.
+   */
+  contextMenu(e: MouseEvent): ContextTarget | null {
+    const tab = this.host.tab();
+    if (!tab || useInteraction.getState().editingId) return null;
+    const d = this.drag;
+    if (d.t === "poly") return { t: "drawing", kind: d.kind, points: d.pts.length };
+    if (d.t !== "idle") return null;
+    const c = this.contentPoint(e);
+    let page = pageAt(this.host.layout(), c[0], c[1]);
+    let hit = page ? this.hitAt(tab, page, this.toPage(page, c)) : null;
+    if (!hit) {
+      const stray = this.strayHit(tab, c);
+      if (stray) [page, hit] = [stray.page, stray.hit];
+    }
+    if (!page) return null;
+    const pt = this.toPage(page, c);
+    const at = { pageId: page.entry.id, pt };
+    if (hit) {
+      const ids = tab.selection.includes(hit.id) ? tab.selection : withGroups(tab.state.markups, [hit.id]);
+      this.setSelection(ids);
+      return { t: "markup", at, ids };
+    }
+    const ts = tab.textSelection;
+    const tol = this.tol(page, 3);
+    if (ts?.text && ts.pageId === page.entry.id && ts.quads.some((q) => inRect(inflate(bboxOf(quadPoints(q)), tol), pt))) return { t: "text", at };
+    this.setSelection([]);
+    const index = tab.state.pages.findIndex((p) => p.id === page.entry.id);
+    if (index >= 0 && index !== tab.currentPage) updateTab(tab.key, (t) => ({ ...t, currentPage: index }));
+    return { t: "page", at, index };
+  }
+
+  /** The page and point under a dragged-in file. */
+  pointAt(e: { clientX: number; clientY: number }): { pageId: string; pt: Pt } | null {
+    const c = this.contentPoint(e);
+    const page = pageAt(this.host.layout(), c[0], c[1]);
+    return page ? { pageId: page.entry.id, pt: this.toPage(page, c) } : null;
+  }
+
   doubleClick(e: MouseEvent) {
     const d = this.drag;
     if (d.t === "poly") {
@@ -687,10 +821,16 @@ export class Controller {
     const page = pageAt(this.host.layout(), c[0], c[1]);
     if (!page) return;
     const hit = this.hitAt(tab, page, this.toPage(page, c));
-    if (hit && (hit.kind === "textbox" || hit.kind === "callout") && !hit.locked) {
+    if (!hit) return;
+    if ((hit.kind === "textbox" || hit.kind === "callout") && !hit.locked) {
       this.setSelection([hit.id]);
       useInteraction.setState({ editingId: hit.id });
+      return;
     }
+    // any other markup: write its comment
+    if (hit.kind === "link") return;
+    this.setSelection([hit.id]);
+    showComment();
   }
 
   finishPoly() {
@@ -729,7 +869,42 @@ export class Controller {
     if (!useApp.getState().tools.reuse) useApp.setState((s) => ({ tools: { ...s.tools, tool: "select", chest: null } }));
   }
 
+  /** Drops the shape being drawn (the right-click menu's Cancel). */
+  discard() {
+    if (this.drag.t === "idle") return;
+    this.drag = { t: "idle" };
+    this.host.redraw();
+  }
+
+  /** Takes back the last point of the polyline or polygon being drawn. */
+  removeLastPoint() {
+    const d = this.drag;
+    if (d.t === "poly" && d.pts.length > 1) {
+      d.pts.pop();
+      this.host.redraw();
+    }
+  }
+
+  /**
+   * Arrow keys move the selected markups one screen pixel (ten with Shift) in the direction shown on screen,
+   * whatever the page's rotation. A run of presses undoes as one step.
+   */
+  nudge(dx: number, dy: number): boolean {
+    const tab = this.host.tab();
+    if (!tab) return false;
+    const ms = tab.selection.map((id) => tab.state.markups[id]).filter((m) => m && !m.locked);
+    const pl = ms.length ? this.host.layout().pages.find((p) => p.entry.id === ms[0].pageId) : undefined;
+    if (!pl) return false;
+    const o = apply(pl.inv, [0, 0]);
+    const v = apply(pl.inv, [dx, dy]);
+    const [px, py] = [v[0] - o[0], v[1] - o[1]];
+    const moved = keepOnPage(pl, ms.filter((m) => m.pageId === pl.entry.id).map((m) => translate(m, px, py)));
+    commit(tab.key, "Move", (s) => withMarkups(s, moved), "nudge");
+    return true;
+  }
+
   cancel() {
+    this.lastInk = null;
     // Esc finishes a count (each click is already a counted item)
     if (this.drag.t === "poly" && this.drag.kind === "count") {
       this.finishPoly();
@@ -764,7 +939,31 @@ export class Controller {
         return true;
       }
     }
-    if (e.key === "Escape") return this.cancel();
+    if (e.key === "Escape") {
+      if (this.cancel()) return true;
+      // with nothing being drawn, Esc lets go of the selection
+      const tab = this.host.tab();
+      if (tab?.selection.length && this.tool === "select") {
+        this.setSelection([]);
+        return true;
+      }
+      return false;
+    }
+    // Enter (or F2) starts typing into a selected text box or callout
+    if ((e.key === "Enter" || e.key === "F2") && d.t === "idle" && this.tool === "select") {
+      const tab = this.host.tab();
+      const m = tab && tab.selection.length === 1 ? tab.state.markups[tab.selection[0]] : undefined;
+      if (m && !m.locked && (m.kind === "textbox" || m.kind === "callout")) {
+        useInteraction.setState({ editingId: m.id });
+        return true;
+      }
+    }
+    const arrows: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    const dir = arrows[e.key];
+    if (dir && !e.ctrlKey && !e.metaKey && !e.altKey && d.t === "idle" && this.tool === "select") {
+      const step = e.shiftKey ? 10 : 1;
+      return this.nudge(dir[0] * step, dir[1] * step);
+    }
     return false;
   }
 
@@ -783,15 +982,25 @@ export class Controller {
 
 export { withDerivedRect };
 
+/** The tooltip over a markup: what it is, who made it, and its comment. */
+export function hoverText(m: Markup): string {
+  const head = [m.subject || KIND_LABELS[m.kind], m.author, formatDate(m.modified)].filter(Boolean).join(" · ");
+  const comment = m.kind === "textbox" || m.kind === "callout" ? "" : m.contents.trim();
+  const replies = m.replies.length ? `${m.replies.length} repl${m.replies.length === 1 ? "y" : "ies"}` : "";
+  return [head, comment.length > 300 ? comment.slice(0, 300) + "…" : comment, replies].filter(Boolean).join("\n");
+}
+
+/** Shows the Properties panel with the cursor in the comment box. */
+function showComment() {
+  showPanel("properties");
+  requestAnimationFrame(() => requestAnimationFrame(() => (document.querySelector('[data-testid="prop-comment"]') as HTMLElement | null)?.focus()));
+}
+
+const inRect = (r: Rect, p: Pt) => p[0] >= r[0] && p[0] <= r[2] && p[1] >= r[1] && p[1] <= r[3];
+
 /** Shifts markups (as a group) just enough that they lie within the page. */
 export function keepOnPage(page: PageLayout, ms: Markup[]): Markup[] {
-  if (!ms.length) return ms;
-  const pb = page.entry.info.bounds;
-  const b = ms.map(markupBounds).reduce((a, r) => [Math.min(a[0], r[0]), Math.min(a[1], r[1]), Math.max(a[2], r[2]), Math.max(a[3], r[3])]);
-  const shift = (lo: number, hi: number, plo: number, phi: number) => (hi - lo > phi - plo ? plo - lo : lo < plo ? plo - lo : hi > phi ? phi - hi : 0);
-  const dx = shift(b[0], b[2], pb[0], pb[2]);
-  const dy = shift(b[1], b[3], pb[1], pb[3]);
-  return dx || dy ? ms.map((m) => translate(m, dx, dy)) : ms;
+  return keptWithin(page.entry.info.bounds, ms);
 }
 
 /** The point on a closed outline nearest to `p`. */

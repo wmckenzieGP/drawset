@@ -8,6 +8,7 @@ import { isMeasure } from "../../markup/measure";
 import { KIND_LABELS, newId, nowIso, type Markup, type MarkupKind, type MarkupStyle } from "../../markup/model";
 import { translate } from "../../markup/edit";
 import type { PageEntry } from "../../state/store";
+import { fromBase64, toBase64 } from "../../platform/base64";
 
 /** What a tool keeps of a markup: everything except identity, page, author, dates, review state and file links. */
 export type ToolTemplate = Pick<Markup, "kind" | "subtype" | "rect" | "points" | "inks" | "quads" | "style" | "contents" | "subject" | "icon" | "stampId" | "stampText" | "image" | "measure">;
@@ -113,18 +114,6 @@ interface ToolJson extends Omit<ChestTool, "template"> {
   template: Omit<ToolTemplate, "image"> & { image?: { data: string; mime: string; width: number; height: number } };
 }
 
-function toBase64(b: Uint8Array): string {
-  let s = "";
-  for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
-  return btoa(s);
-}
-
-function fromBase64(s: string): Uint8Array {
-  const bin = atob(s);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
 
 function toolToJson(t: ChestTool): ToolJson {
   const { image, ...rest } = t.template;

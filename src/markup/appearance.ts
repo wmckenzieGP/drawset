@@ -7,6 +7,7 @@ import { bboxOf, dist, inflate, signedArea, type Pt, type Quad, type Rect } from
 import { FONT_WIDTHS } from "./fontMetrics";
 import type { FontFamily, LineEnd, Markup, RGB } from "./model";
 import { arcThrough, dimensionLine, measureValue } from "./measure";
+import { smoothCurve } from "./ink";
 
 export type Seg = ["M", number, number] | ["L", number, number] | ["C", number, number, number, number, number, number] | ["Z"];
 
@@ -77,6 +78,13 @@ export function polySegs(pts: readonly Pt[], close: boolean): Seg[] {
   pts.forEach((p, i) => segs.push([i === 0 ? "M" : "L", p[0], p[1]]));
   if (close && pts.length > 2) segs.push(["Z"]);
   return segs;
+}
+
+/** A freehand stroke drawn as a smooth curve through its points. */
+function inkSegs(pts: readonly Pt[]): Seg[] {
+  const c = smoothCurve(pts);
+  if (!c) return polySegs(pts, false);
+  return [["M", c.start[0], c.start[1]], ...c.curves.map(([c1, c2, e]): Seg => ["C", c1[0], c1[1], c2[0], c2[1], e[0], e[1]])];
 }
 
 function roundRectSegs(r: Rect, rad: number): Seg[] {
@@ -309,6 +317,44 @@ function stampOps(m: Markup): DrawOp[] {
       color,
       lines: lines.slice(1).map((l, i) => ({ x: cx - textWidth("Helvetica", subSize, l) / 2, y: top + 7 * s + titleSize + 4 * s + subSize * ASCENT + i * subSize * 1.3, s: l })),
     });
+  }
+  return ops;
+}
+
+/** Share of a captioned signature's height taken by the caption's text size, and the caption band per text size. */
+const SIG_CAPTION = 0.13;
+const SIG_BAND = 1.6;
+
+/** A signature's caption size for a frame `h` tall. */
+export const signatureCaptionSize = (h: number) => Math.max(3, Math.min(14, h * SIG_CAPTION));
+
+/** The frame height that gives a signature picture `imageH` tall room for its caption underneath. */
+export function signatureFrameHeight(imageH: number, caption: boolean): number {
+  if (!caption) return imageH;
+  const h = imageH / (1 - SIG_CAPTION * SIG_BAND);
+  return imageH + signatureCaptionSize(h) * SIG_BAND;
+}
+
+/** A signature: the picture (kept in proportion) standing on its caption, the signer's name and the date. */
+function signatureOps(m: Markup): DrawOp[] {
+  const r = m.rect;
+  const [w, h] = [r[2] - r[0], r[3] - r[1]];
+  let size = m.caption ? signatureCaptionSize(h) : 0;
+  const area: Rect = [r[0], r[1], r[2], r[3] - size * SIG_BAND];
+  const ops: DrawOp[] = [];
+  if (m.image) {
+    const [aw, ah] = [area[2] - area[0], area[3] - area[1]];
+    const s = Math.min(aw / m.image.width, ah / m.image.height);
+    const [iw, ih] = [m.image.width * s, m.image.height * s];
+    const x0 = area[0] + (aw - iw) / 2;
+    ops.push({ t: "image", rect: [x0, area[3] - ih, x0 + iw, area[3]] });
+  }
+  if (m.caption) {
+    // a long name shrinks to fit the width
+    const natural = textWidth("Helvetica", size, m.caption);
+    if (natural > w) size *= w / natural;
+    const tw = textWidth("Helvetica", size, m.caption);
+    ops.push({ t: "text", font: "Helvetica", size, color: m.style.textColor, lines: [{ x: r[0] + (w - tw) / 2, y: area[3] + size * 0.25 + size * ASCENT, s: m.caption }] });
   }
   return ops;
 }
@@ -595,7 +641,7 @@ export function buildAppearance(m: Markup): Appearance {
     case "pen":
     case "highlighter":
       if (m.kind === "highlighter") blend = "Multiply";
-      if (stroke) ops.push({ t: "path", segs: m.inks.flatMap((ink) => polySegs(ink, false)), fill: null, stroke, width: s.width, dash: null, cap: 1, join: 1 });
+      if (stroke) ops.push({ t: "path", segs: m.inks.flatMap(inkSegs), fill: null, stroke, width: s.width, dash: null, cap: 1, join: 1 });
       break;
     case "textbox":
       ops.push(...textBoxOps(m));
@@ -622,6 +668,9 @@ export function buildAppearance(m: Markup): Appearance {
       break;
     case "image":
       if (!m.keepAppearance) ops.push({ t: "image", rect: m.rect });
+      break;
+    case "signature":
+      if (!m.keepAppearance) ops.push(...signatureOps(m));
       break;
     case "area":
     case "volume":
@@ -655,7 +704,7 @@ export function buildAppearance(m: Markup): Appearance {
   }
   // box kinds keep /Rect equal to their frame so the frame survives save and reopen exactly
   // (for redactions /Rect is the area to remove, so it must be exactly the frame)
-  const frameIsBox = m.kind === "textbox" || m.kind === "stamp" || m.kind === "image" || m.kind === "note" || m.kind === "redact" || m.kind === "erase" || m.kind === "link";
+  const frameIsBox = m.kind === "textbox" || m.kind === "stamp" || m.kind === "image" || m.kind === "signature" || m.kind === "note" || m.kind === "redact" || m.kind === "erase" || m.kind === "link";
   return { ops, bbox: frameIsBox ? m.rect : opsBounds(ops, m), opacity: s.opacity, blend };
 }
 

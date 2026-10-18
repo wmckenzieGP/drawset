@@ -1,11 +1,12 @@
 import { openLinkDialog } from "../links/LinkDialog";
 import { describeTarget, followLink } from "../links/navigate";
 import { ReplyThread } from "../replies/ReplyThread";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { colourHex, FONT_FAMILIES, formatDate, hexColour, KIND_LABELS, LINE_ENDS, nowIso, STATUSES, type Markup, type MarkupKind, type MarkupStyle, type ReviewStatus } from "../../markup/model";
 import { textBoxHeight, textPadding } from "../../markup/appearance";
 import { commit, defaultStyleFor, useApp, withMarkups, type DocTab } from "../../state/store";
 import { cmd } from "../../app/commands";
+import { openSignatures } from "../signature/signatures";
 
 const FILL_KINDS = new Set<MarkupKind>(["rectangle", "ellipse", "polygon", "cloud", "textbox", "callout", "line", "arrow", "polyline", "area", "count", "volume", "radius", "diameter"]);
 const WIDTH_KINDS = new Set<MarkupKind>(["link", "rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "pen", "highlighter", "textbox", "callout", "length", "polylength", "area", "perimeter", "angle", "arc", "dimension", "volume", "radius", "diameter"]);
@@ -45,6 +46,16 @@ function TextField({ label, value, onCommit, multiline, testId }: { label: strin
   const [v, setV] = useState(value);
   useEffect(() => setV(value), [value]);
   const done = () => v !== value && onCommit(v);
+  // a click on the page can take the markup's fields away before they lose focus: keep what was typed
+  const latest = useRef({ v, value, onCommit });
+  latest.current = { v, value, onCommit };
+  useEffect(
+    () => () => {
+      const l = latest.current;
+      if (l.v !== l.value) l.onCommit(l.v);
+    },
+    [],
+  );
   return (
     <label className="prop-row stacked">
       <span>{label}</span>
@@ -172,7 +183,7 @@ export function PropertiesPanel({ tab }: { tab: DocTab }) {
       if (!targets.length) return;
       commit(tab.key, label, (s) => withMarkups(s, targets.map((m) => ({ ...fn(m), modified: nowIso() }))), tag ? `${tag}:${targets.map((m) => m.id).join(",")}` : undefined);
     };
-    const styleKinds = kinds.filter((k) => k !== "foreign" && k !== "image");
+    const styleKinds = kinds.filter((k) => k !== "foreign" && k !== "image" && k !== "signature");
     return (
       <div className="panel-body props" data-testid="properties">
         <div className="panel-title">
@@ -199,9 +210,9 @@ export function PropertiesPanel({ tab }: { tab: DocTab }) {
         )}
         {selected.length === 1 && (
           <>
-            <TextField label={TEXT_KINDS.has(first.kind) ? "Text" : "Comment"} value={first.contents} multiline onCommit={(v) => update("Edit comment", (m) => fitText({ ...m, contents: v }))} testId="prop-comment" />
-            <TextField label="Subject" value={first.subject} onCommit={(v) => update("Edit subject", (m) => ({ ...m, subject: v }))} testId="prop-subject" />
-            <TextField label="Author" value={first.author} onCommit={(v) => update("Edit author", (m) => ({ ...m, author: v }))} testId="prop-author" />
+            <TextField key={`c-${first.id}`} label={TEXT_KINDS.has(first.kind) ? "Text" : "Comment"} value={first.contents} multiline onCommit={(v) => update("Edit comment", (m) => fitText({ ...m, contents: v }))} testId="prop-comment" />
+            <TextField key={`s-${first.id}`} label="Subject" value={first.subject} onCommit={(v) => update("Edit subject", (m) => ({ ...m, subject: v }))} testId="prop-subject" />
+            <TextField key={`a-${first.id}`} label="Author" value={first.author} onCommit={(v) => update("Edit author", (m) => ({ ...m, author: v }))} testId="prop-author" />
             <div className="prop-row">
               <span>Created</span>
               <span className="prop-value">{formatDate(first.created)}</span>
@@ -227,7 +238,7 @@ export function PropertiesPanel({ tab }: { tab: DocTab }) {
         <label className="check prop-row">
           <input type="checkbox" checked={selected.every((m) => m.locked)} onChange={(e) => cmd.setLocked(e.target.checked)} data-testid="prop-locked" /> Locked
         </label>
-        {selected.length === 1 && <ReplyThread tabKey={tab.key} markup={first} />}
+        {selected.length === 1 && <ReplyThread key={first.id} tabKey={tab.key} markup={first} />}
       </div>
     );
   }
@@ -236,6 +247,16 @@ export function PropertiesPanel({ tab }: { tab: DocTab }) {
   if (isDrawTool) {
     const kind = tool as MarkupKind;
     const style = defaults[kind] ?? defaultStyleFor(kind);
+    if (kind === "signature")
+      return (
+        <div className="panel-body props">
+          <div className="panel-title">Signature tool</div>
+          <p className="muted pad">Click where you want to sign, or drag a box to size the signature. Corner handles keep its proportions.</p>
+          <button className="btn small pad-x" onClick={openSignatures}>
+            New or delete signatures…
+          </button>
+        </div>
+      );
     return (
       <div className="panel-body props">
         <div className="panel-title">{KIND_LABELS[kind]} tool</div>
