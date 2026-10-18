@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { transformRect, type Rect } from "../../markup/geometry";
-import { focusPane, setView, updateTab, useApp, type DocTab, type Pane } from "../../state/store";
+import { focusPane, isContinuous, isPaired, scrollToPage, setView, updateTab, useApp, wheelAction, type DocTab, type Pane } from "../../state/store";
 import { followPane, leadPane, publishPosition } from "./splitSync";
 import { Controller, useInteraction, type ViewerHost } from "./controller";
-import { computeLayout, visibleRange, type Layout, type PageLayout } from "./layout";
+import { computeLayout, pageByIndex, PAGE_GAP, pageStep, shownFrom, visibleRange, type Layout, type PageLayout } from "./layout";
 import { drawOverlay, addBitmapListener } from "./overlay";
 import { previewScale, renderCache, TILE } from "./renderCache";
 import { TextEditor } from "./TextEditor";
@@ -74,11 +74,16 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
   const editingId = useInteraction((s) => s.editingId);
   const cursor = useInteraction((s) => s.cursor);
   const hoverTitle = useInteraction((s) => s.title);
+  // the grid is drawn on the overlay, so redraw when it is switched
+  useApp((s) => s.snap.showGrid && s.snap.gridMm);
   const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
   const tabRef = useRef(tab);
   tabRef.current = tab;
 
-  const layout: Layout = useMemo(() => computeLayout(tab.state.pages, tab.view.scale, tab.view.rotation, size.w), [tab.state.pages, tab.view.scale, tab.view.rotation, size.w]);
+  const mode = tab.view.mode;
+  // a single-page layout is rebuilt when the page (or pair) shown changes, not on every current-page change
+  const shown = isContinuous(mode) ? 0 : shownFrom(mode, tab.currentPage);
+  const layout: Layout = useMemo(() => computeLayout(tab.state.pages, tab.view.scale, tab.view.rotation, size.w, mode, shown), [tab.state.pages, tab.view.scale, tab.view.rotation, size.w, mode, shown]);
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
 
@@ -104,11 +109,11 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
     const [a] = visibleRange(old, cy, cy);
     const p = old.pages[a];
     let target: { index: number; px: number; py: number } | null = null;
-    if (p) target = { index: a, px: (cx - p.x) / p.w, py: (cy - p.y) / p.h };
+    if (p) target = { index: p.index, px: (cx - p.x) / p.w, py: (cy - p.y) / p.h };
     setView(t.key, { scale: s });
     requestAnimationFrame(() => {
       const nl = layoutRef.current;
-      const np = target ? nl.pages[target.index] : null;
+      const np = target ? pageByIndex(nl, target.index) : null;
       if (np && target) {
         el.scrollLeft = np.x + target.px * np.w - anchorX;
         el.scrollTop = np.y + target.py * np.h - anchorY;
@@ -132,7 +137,8 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
         const s = clampScale(cur * Math.min(el.clientWidth / w, el.clientHeight / h) * 0.9);
         setView(tabRef.current.key, { scale: s });
         requestAnimationFrame(() => {
-          const np = layoutRef.current.pages[page.index];
+          const np = pageByIndex(layoutRef.current, page.index);
+          if (!np) return;
           const nd = transformRect(r, np.m);
           el.scrollLeft = np.x + (nd[0] + nd[2]) / 2 - el.clientWidth / 2;
           el.scrollTop = np.y + (nd[1] + nd[3]) / 2 - el.clientHeight / 2;
@@ -192,8 +198,14 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
       const el = scrollRef.current;
       if (!el) return;
       const place = () => {
-        const p = layoutRef.current.pages[Math.min(pos.page, layoutRef.current.pages.length - 1)];
-        if (!p) return;
+        const index = Math.min(pos.page, tabRef.current.state.pages.length - 1);
+        const p = pageByIndex(layoutRef.current, index);
+        if (!p) {
+          // a single-page layout shows the other pane's page first
+          updateTab(tabRef.current.key, (t) => ({ ...t, currentPage: index }));
+          requestAnimationFrame(place);
+          return;
+        }
         el.scrollLeft = p.x + pos.px * p.w - el.clientWidth / 2;
         el.scrollTop = p.y + pos.py * p.h - el.clientHeight / 2;
       };
@@ -215,7 +227,7 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
     const cy = el.scrollTop + el.clientHeight / 2;
     const [a] = visibleRange(layoutRef.current, cy, cy);
     const p = layoutRef.current.pages[a];
-    if (p) publishPosition(pane, { page: a, px: (cx - p.x) / p.w, py: (cy - p.y) / p.h, scale: tabRef.current.view.scale });
+    if (p) publishPosition(pane, { page: p.index, px: (cx - p.x) / p.w, py: (cy - p.y) / p.h, scale: tabRef.current.view.scale });
   };
 
   // viewport size
@@ -233,22 +245,28 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
     const fit = tab.view.fit;
     const el = scrollRef.current;
     if (!fit || !el || el.clientWidth < 50) return;
-    const p = layout.pages[tab.currentPage] ?? layout.pages[0];
+    const p = pageByIndex(layout, tab.currentPage) ?? layout.pages[0];
     if (!p) return;
-    const pw = p.w / tab.view.scale;
-    const ph = p.h / tab.view.scale;
+    // side by side, the pair fits together
+    const mate = isPaired(mode) ? pageByIndex(layout, p.index % 2 === 0 ? p.index + 1 : p.index - 1) : undefined;
+    const pw = (p.w + (mate ? mate.w + PAGE_GAP : 0)) / tab.view.scale;
+    const ph = Math.max(p.h, mate?.h ?? 0) / tab.view.scale;
     const s = fit === "width" ? (el.clientWidth - 48) / pw : Math.min((el.clientWidth - 48) / pw, (el.clientHeight - 32) / ph);
     updateTab(tab.key, (t) => ({ ...t, view: { ...t.view, fit: undefined, scale: clampScale(s), scrollTo: { page: t.currentPage, nonce: Date.now() } } }));
-  }, [tab.view.fit, tab.key, tab.currentPage, tab.view.scale, layout]);
+  }, [tab.view.fit, tab.key, tab.currentPage, tab.view.scale, layout, mode]);
 
   // scroll requests
   useEffect(() => {
     const req = tab.view.scrollTo;
     const el = scrollRef.current;
     if (!req || !el) return;
-    const p = layout.pages[req.page];
+    const p = pageByIndex(layout, req.page);
+    // a single-page layout first has to show the page
     if (!p) return;
-    if (req.rect) {
+    if (req.end) {
+      el.scrollTop = p.y + p.h - el.clientHeight + 12;
+      el.scrollLeft = Math.max(0, p.x + p.w / 2 - el.clientWidth / 2);
+    } else if (req.rect) {
       const d = transformRect(req.rect, p.m);
       el.scrollLeft = p.x + (d[0] + d[2]) / 2 - el.clientWidth / 2;
       el.scrollTop = p.y + (d[1] + d[3]) / 2 - el.clientHeight / 2;
@@ -265,24 +283,66 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
     if (!el) return;
     setScroll({ left: el.scrollLeft, top: el.scrollTop });
     redraw();
-    const mid = el.scrollTop + el.clientHeight / 2;
-    const [a] = visibleRange(layout, mid, mid);
-    const cur = layout.pages[a] && layout.pages[a].y <= mid + 8 ? a : Math.max(0, a - 1);
-    if (cur !== tabRef.current.currentPage) updateTab(tab.key, (t) => ({ ...t, currentPage: cur }));
+    // in a continuous layout the page in the middle of the window is the current one; otherwise it is the one shown
+    if (isContinuous(layout.mode)) {
+      // the page taking up most of the window (the top one when several fit)
+      const top = el.scrollTop;
+      const bottom = top + el.clientHeight;
+      const [a, b] = visibleRange(layout, top, bottom);
+      let cur = layout.pages[a]?.index ?? 0;
+      let best = -1;
+      for (let i = a; i <= b; i++) {
+        const p = layout.pages[i];
+        const seen = Math.max(0, Math.min(bottom, p.y + p.h) - Math.max(top, p.y)) / Math.max(1, Math.min(p.h, el.clientHeight));
+        if (seen > best + 0.02) {
+          best = seen;
+          cur = p.index;
+        }
+      }
+      if (cur !== tabRef.current.currentPage) updateTab(tab.key, (t) => ({ ...t, currentPage: cur }));
+    }
     publish();
   };
 
-  // wheel zoom (non-passive so the page does not scroll)
+  // the wheel zooms or scrolls, as set for the layout; Ctrl held does the other (non-passive so zooming does not scroll)
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
+    let flipAt = 0;
     const onWheel = (e: WheelEvent) => {
       if (e.shiftKey) return; // shift+wheel scrolls horizontally
-      e.preventDefault();
-      const r = el.getBoundingClientRect();
+      const t = tabRef.current;
+      const action = wheelAction(t.view.mode);
+      const zoom = action === "zoom" ? !e.ctrlKey : e.ctrlKey;
       const delta = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
-      const factor = Math.pow(1.0015, -delta);
-      zoomTo(tabRef.current.view.scale * factor, e.clientX - r.left, e.clientY - r.top);
+      if (zoom) {
+        e.preventDefault();
+        const r = el.getBoundingClientRect();
+        zoomTo(t.view.scale * Math.pow(1.0015, -delta), e.clientX - r.left, e.clientY - r.top);
+        return;
+      }
+      if (e.ctrlKey) e.preventDefault();
+      if (isContinuous(t.view.mode)) {
+        if (e.ctrlKey) el.scrollTop += delta;
+        return;
+      }
+      // one page at a time: scrolling past the end of the page turns to the next one (and back)
+      const atEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+      const atStart = el.scrollTop <= 0;
+      const now = performance.now();
+      if ((delta > 0 && atEnd) || (delta < 0 && atStart)) {
+        e.preventDefault();
+        if (now - flipAt < 350) return;
+        flipAt = now;
+        const step = pageStep(t.view.mode);
+        const from = shownFrom(t.view.mode, t.currentPage);
+        const to = delta > 0 ? from + step : from - step;
+        if (to < 0 || to >= t.state.pages.length) return;
+        scrollToPage(t.key, to);
+        if (delta < 0) updateTab(t.key, (x) => ({ ...x, view: { ...x.view, scrollTo: { ...x.view.scrollTo!, end: true } } }));
+        return;
+      }
+      if (e.ctrlKey) el.scrollTop += delta;
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);

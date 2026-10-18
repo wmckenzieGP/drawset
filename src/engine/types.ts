@@ -84,6 +84,8 @@ export interface SavePlan {
   upserts: { markup: Markup; page: number }[];
   /** Object numbers of markups that were deleted. */
   deletes: number[];
+  /** Drawing order (back to front, by markup id) for physical pages whose markups were rearranged. */
+  order?: Record<number, string[]>;
   /** Burn markups into page content (permanent). */
   flatten?: boolean;
   /** Form field values by field name (already applied to the open document; repeated for copies). */

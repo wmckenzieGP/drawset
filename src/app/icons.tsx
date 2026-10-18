@@ -53,6 +53,18 @@ const P: Record<string, ReactElement> = {
   calibrate: <path d="M3 9h18v6H3zM7 9v3M11 9v3M15 9v3M19 9v2" />,
   redact: <path d="M4 7h16v10H4zM7 10h10M7 14h6" />,
   erase: <path d="M8 20h12M5.5 14.5l8-8a2 2 0 012.8 0l2.2 2.2a2 2 0 010 2.8L12 18H8z M9 11l5 5" />,
+  first: <path d="M7 5v14M17 5l-7 7 7 7" />,
+  last: <path d="M17 5v14M7 5l7 7-7 7" />,
+  prevPage: <path d="M14 6l-6 6 6 6" />,
+  nextPage: <path d="M10 6l6 6-6 6" />,
+  viewBack: <path d="M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3" />,
+  viewForward: <path d="M15 14l5-5-5-5M20 9H10a6 6 0 000 12h3" />,
+  single: <rect x="7" y="4" width="10" height="16" rx="0.5" />,
+  continuous: <path d="M7 2h10v9H7zM7 14h10v9H7z" />,
+  sideBySide: <path d="M2.5 5h8.5v14H2.5zM13 5h8.5v14H13z" />,
+  continuousSideBySide: <path d="M3 2h8v9H3zM13 2h8v9h-8zM3 14h8v9H3zM13 14h8v9h-8z" />,
+  wheelZoom: <path d="M9 3h6a3 3 0 013 3v8a6 6 0 01-12 0V6a3 3 0 013-3zM12 6v4M10 13h4M12 11v4" />,
+  wheelScroll: <path d="M9 3h6a3 3 0 013 3v8a6 6 0 01-12 0V6a3 3 0 013-3zM12 6v4M10 13l2 2 2-2" />,
   props: <path d="M4 7h10M18 7h2M4 17h4M12 17h8M14 4v6M8 14v6" />,
 };
 

@@ -11,6 +11,7 @@ import { keepOnPage } from "../../src/features/viewer/controller";
 import { computeLayout } from "../../src/features/viewer/layout";
 import { markupBounds } from "../../src/markup/appearance";
 import { translate } from "../../src/markup/edit";
+import { arranged } from "../../src/app/commands";
 
 const host = vi.hoisted(() => ({ dest: undefined as string | null | undefined, write: null as null | ((b: Uint8Array) => void) }));
 vi.mock("../../src/platform/host", async (orig) => ({
@@ -124,5 +125,32 @@ describe("document state", () => {
     expect(r[3]).toBeLessThanOrEqual(b[3] + 1e-6);
     expect(r[1]).toBeGreaterThanOrEqual(b[1]);
     expect(r[0]).toBe(markupBounds(box)[0]);
+  });
+
+  it("bring to front and send to back change the drawing order, and the saved file keeps it", async () => {
+    const info = core.open(read("calibration.pdf"), "calibration.pdf");
+    const key = addTab(info, "calibration.pdf", null);
+    setLoadedMarkups(key, []);
+    const pid = tabOf(key).state.pages[0].id;
+    const [a, b, c] = ["A", "B", "C"].map((n) => mk("rectangle", { pageId: pid, points: [[10, 10], [60, 40]], contents: n }));
+    commit(key, "Add", (s) => withMarkups(s, [a, b, c]));
+    host.dest = null;
+    let written: Uint8Array | null = null;
+    host.write = (bytes) => void (written = bytes);
+    expect(await saveTab(key)).toBe(true);
+    const ids = () => Object.values(tabOf(key).state.markups).map((m) => m.contents);
+    expect(ids()).toEqual(["A", "B", "C"]);
+    const idOf = (n: string) => Object.values(tabOf(key).state.markups).find((m) => m.contents === n)!.id;
+    commit(key, "Front", (s) => ({ ...s, markups: arranged(s.markups, new Set([idOf("A")]), "front") }));
+    expect(ids()).toEqual(["B", "C", "A"]);
+    commit(key, "Back", (s) => ({ ...s, markups: arranged(s.markups, new Set([idOf("C")]), "back") }));
+    expect(ids()).toEqual(["C", "B", "A"]);
+    commit(key, "Forward", (s) => ({ ...s, markups: arranged(s.markups, new Set([idOf("C")]), "forward") }));
+    expect(ids()).toEqual(["B", "C", "A"]);
+    expect(await saveTab(key)).toBe(true);
+    const order = openMupdf(written!).loadPage(0).getAnnotations().map((x) => x.getContents());
+    expect(order).toEqual(["B", "C", "A"]);
+    // and reading the file back gives the same order
+    expect(ids()).toEqual(["B", "C", "A"]);
   });
 });

@@ -40,15 +40,21 @@ export interface DocState {
   fields?: Record<string, string>;
 }
 
+/** How pages are laid out: one page (or pair) at a time, or all pages in a scrolling column. */
+export type PageMode = "single" | "continuous" | "sideBySide" | "continuousSideBySide";
+export const isContinuous = (m: PageMode) => m === "continuous" || m === "continuousSideBySide";
+export const isPaired = (m: PageMode) => m === "sideBySide" || m === "continuousSideBySide";
+
 export interface ViewState {
   /** CSS pixels per point. */
   scale: number;
+  mode: PageMode;
   /** View rotation (does not change the file). */
   rotation: Rotation;
   /** Pending fit request, consumed by the viewer. */
   fit?: "page" | "width";
   /** Requested scroll target, consumed by the viewer. */
-  scrollTo?: { page: number; rect?: Rect; nonce: number };
+  scrollTo?: { page: number; rect?: Rect; nonce: number; end?: boolean };
 }
 
 export interface SearchState {
@@ -124,14 +130,109 @@ export interface AppState {
   active: string | null;
   tools: ToolState;
   author: string;
-  leftPanel: "thumbnails" | "bookmarks" | "search" | "toolchest" | "forms" | null;
-  rightPanel: boolean;
+  /** The panel open on each side (null: that side is closed). */
+  leftPanel: PanelId | null;
+  rightPanel: PanelId | null;
   bottomPanel: boolean;
+  /** Which side each panel lives on, and which bars are shown. */
+  chrome: ChromePrefs;
   message: { text: string; kind: "info" | "error" } | null;
   busy: string | null;
   snap: SnapSettings;
   /** Two documents side by side; the focused pane follows the active tab. */
   split: SplitState | null;
+  nav: NavPrefs;
+}
+
+export type PanelId = "thumbnails" | "bookmarks" | "search" | "toolchest" | "forms" | "properties" | "measurements";
+export type Side = "left" | "right";
+export const PANELS: PanelId[] = ["thumbnails", "bookmarks", "search", "toolchest", "forms", "properties", "measurements"];
+export interface ChromePrefs {
+  side: Record<PanelId, Side>;
+  menuBar: boolean;
+  navBar: boolean;
+  statusBar: boolean;
+}
+const DEFAULT_CHROME: ChromePrefs = {
+  side: { thumbnails: "left", bookmarks: "left", search: "left", toolchest: "left", forms: "left", properties: "right", measurements: "left" },
+  menuBar: true,
+  navBar: true,
+  statusBar: true,
+};
+function loadChrome(): ChromePrefs {
+  try {
+    const v = JSON.parse(localStorage.getItem("drawset.chrome") ?? "null");
+    if (!v || typeof v !== "object") return DEFAULT_CHROME;
+    const side = { ...DEFAULT_CHROME.side };
+    for (const p of PANELS) if (v.side?.[p] === "left" || v.side?.[p] === "right") side[p] = v.side[p];
+    const flag = (x: unknown, d: boolean) => (typeof x === "boolean" ? x : d);
+    return { side, menuBar: flag(v.menuBar, true), navBar: flag(v.navBar, true), statusBar: flag(v.statusBar, true) };
+  } catch {
+    return DEFAULT_CHROME;
+  }
+}
+export function setChrome(patch: Partial<ChromePrefs>) {
+  useApp.setState((s) => ({ chrome: { ...s.chrome, ...patch } }));
+  try {
+    localStorage.setItem("drawset.chrome", JSON.stringify(useApp.getState().chrome));
+  } catch {
+    /* storage unavailable */
+  }
+}
+const sideKey = (side: Side) => (side === "left" ? "leftPanel" : "rightPanel");
+/** Opens a panel on its side. */
+export function showPanel(id: PanelId) {
+  useApp.setState({ [sideKey(useApp.getState().chrome.side[id])]: id } as Partial<AppState>);
+}
+/** Opens a panel, or closes its side when it is already showing. */
+export function togglePanel(id: PanelId) {
+  const s = useApp.getState();
+  const k = sideKey(s.chrome.side[id]);
+  useApp.setState({ [k]: s[k] === id ? null : id } as Partial<AppState>);
+}
+/** Moves a panel to the other side and shows it there. */
+export function movePanel(id: PanelId, side: Side) {
+  const s = useApp.getState();
+  const from = sideKey(s.chrome.side[id]);
+  setChrome({ side: { ...s.chrome.side, [id]: side } });
+  useApp.setState({ ...(s[from] === id ? { [from]: null } : {}), [sideKey(side)]: id } as Partial<AppState>);
+}
+
+export type WheelAction = "zoom" | "scroll";
+export interface NavPrefs {
+  /** What the mouse wheel does in single page and side by side layouts (Ctrl held does the other). */
+  wheelSingle: WheelAction;
+  /** What the mouse wheel does in the continuous layouts (Ctrl held does the other). */
+  wheelContinuous: WheelAction;
+  /** Layout for newly opened files: by the document (several pages continuous, one page single) or always one. */
+  openMode: "document" | PageMode;
+}
+const DEFAULT_NAV: NavPrefs = { wheelSingle: "zoom", wheelContinuous: "scroll", openMode: "document" };
+
+function loadNav(): NavPrefs {
+  try {
+    const v = JSON.parse(localStorage.getItem("drawset.nav") ?? "null");
+    if (!v || typeof v !== "object") return DEFAULT_NAV;
+    const wheel = (x: unknown, d: WheelAction): WheelAction => (x === "zoom" || x === "scroll" ? x : d);
+    const modes = ["document", "single", "continuous", "sideBySide", "continuousSideBySide"];
+    return { wheelSingle: wheel(v.wheelSingle, DEFAULT_NAV.wheelSingle), wheelContinuous: wheel(v.wheelContinuous, DEFAULT_NAV.wheelContinuous), openMode: modes.includes(v.openMode) ? v.openMode : DEFAULT_NAV.openMode };
+  } catch {
+    return DEFAULT_NAV;
+  }
+}
+
+export function setNavPrefs(patch: Partial<NavPrefs>) {
+  useApp.setState((s) => ({ nav: { ...s.nav, ...patch } }));
+  try {
+    localStorage.setItem("drawset.nav", JSON.stringify(useApp.getState().nav));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+/** What the wheel does for a tab right now, before Ctrl. */
+export function wheelAction(mode: PageMode, nav: NavPrefs = useApp.getState().nav): WheelAction {
+  return isContinuous(mode) ? nav.wheelContinuous : nav.wheelSingle;
 }
 
 export type Pane = "left" | "right";
@@ -150,11 +251,13 @@ export interface SnapSettings {
   /** Snap to the drawing: line end points and intersections. */
   content: boolean;
   grid: boolean;
+  /** Draw the grid over the pages. */
+  showGrid: boolean;
   /** Grid spacing on paper, millimetres. */
   gridMm: number;
 }
 
-const DEFAULT_SNAP: SnapSettings = { markups: true, content: true, grid: false, gridMm: 5 };
+const DEFAULT_SNAP: SnapSettings = { markups: true, content: true, grid: false, showGrid: false, gridMm: 5 };
 
 function loadSnap(): SnapSettings {
   try {
@@ -212,8 +315,10 @@ export const useApp = create<AppState>(() => ({
   tools: { tool: "select", reuse: false, defaults: {}, stampId: "approved", pendingImage: null, chest: null },
   author: loadAuthor(),
   leftPanel: "thumbnails",
-  rightPanel: true,
+  rightPanel: "properties",
   bottomPanel: false,
+  chrome: loadChrome(),
+  nav: loadNav(),
   message: null,
   busy: null,
   snap: loadSnap(),
@@ -284,6 +389,11 @@ export function recordsToMarkups(records: MarkupRecord[], pages: PageEntry[]): R
   return out;
 }
 
+function openModeFor(pageCount: number): PageMode {
+  const m = useApp.getState().nav.openMode;
+  return m === "document" ? (pageCount > 1 ? "continuous" : "single") : m;
+}
+
 export function addTab(info: DocInfo, name: string, path: string | null): string {
   const key = `tab${tabSeq++}`;
   const pages = pagesFromInfo(info);
@@ -301,7 +411,7 @@ export function addTab(info: DocInfo, name: string, path: string | null): string
     selection: [],
     pageSelection: [],
     markupsLoaded: false,
-    view: { scale: 0.25, rotation: 0, fit: "page" },
+    view: { scale: 0.25, rotation: 0, fit: "page", mode: openModeFor(info.pageCount) },
     currentPage: 0,
     nav: { back: [], fwd: [] },
     search: { query: "", hits: [], current: -1, running: false, done: false },

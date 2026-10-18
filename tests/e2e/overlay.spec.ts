@@ -9,7 +9,7 @@ test("overlay: identical pages show no colour, different files do, align by poin
   await openFixture(page, "calibration.pdf");
   await waitForPage(page);
 
-  await page.getByTestId("menu-tools").click();
+  await page.getByTestId("menu-document").click();
   await page.getByRole("menuitem", { name: "Overlay pages…" }).click();
   const canvas = page.getByTestId("overlay-canvas");
   await expect(canvas).toHaveAttribute("data-ready", "1");
@@ -20,7 +20,7 @@ test("overlay: identical pages show no colour, different files do, align by poin
 
   await openFixture(page, "dense-a1.pdf");
   await waitForPage(page);
-  await page.getByTestId("menu-tools").click();
+  await page.getByTestId("menu-document").click();
   await page.getByRole("menuitem", { name: "Overlay pages…" }).click();
   await expect(canvas).toHaveAttribute("data-ready", "1");
   await page.getByTestId("overlay-b-file").selectOption({ label: "calibration.pdf" });

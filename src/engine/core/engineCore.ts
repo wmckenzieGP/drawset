@@ -408,6 +408,10 @@ export class EngineCore {
         writeReplies(ctx, obj, markup);
       }
     }
+    for (const [pageIndex, ids] of Object.entries(plan.order ?? {})) {
+      const i = Number(pageIndex);
+      if (i >= 0 && i < pageCount) orderAnnots(doc.findPage(i), ids);
+    }
     if (plan.applyRedactions) EngineCore.applyRedactions(doc);
     // page scales (before rotation, so the viewport box matches the page as it is now)
     for (const p of plan.pages) {
@@ -524,4 +528,31 @@ export class EngineCore {
     tmp.destroy();
     return bytes;
   }
+}
+
+/**
+ * Puts a page's annotations in the given drawing order (back to front). Markups are found by /NM, or by the
+ * object number the reader uses as their id when they have none; anything else (popups, form fields, other
+ * annotations) keeps its place just after the entry it followed.
+ */
+export function orderAnnots(pageObj: mupdf.PDFObject, ids: string[]) {
+  const arr = pageObj.get("Annots");
+  if (!arr.isArray()) return;
+  const rank = new Map(ids.map((id, i) => [id, i]));
+  const entries: { o: mupdf.PDFObject; r: number; seq: number }[] = [];
+  let last = -1;
+  for (let k = 0; k < arr.length; k++) {
+    const o = arr.get(k);
+    const d = o.resolve();
+    const nm = d.isDictionary() ? d.get("NM") : null;
+    const id = nm && nm.isString() ? nm.asString() : o.isIndirect() ? `obj-${o.asIndirect()}` : "";
+    const r = rank.get(id);
+    if (r !== undefined) last = r;
+    entries.push({ o, r: r ?? last + 0.5, seq: k });
+  }
+  entries.sort((a, b) => a.r - b.r || a.seq - b.seq);
+  if (entries.every((e, k) => e.seq === k)) return;
+  const objs = entries.map((e) => e.o);
+  while (arr.length) arr.delete(arr.length - 1);
+  for (const o of objs) arr.push(o);
 }

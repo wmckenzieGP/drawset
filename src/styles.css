@@ -61,10 +61,27 @@ textarea:focus {
   padding: 8px 12px;
 }
 .app {
-  display: grid;
-  grid-template-rows: 30px 42px auto 1fr 24px;
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   height: 100%;
+}
+.app > .menubar {
+  height: 30px;
+  flex: none;
+}
+.app > .toolbar {
+  height: 42px;
+  flex: none;
+}
+.app > .tabs {
+  flex: none;
+}
+.app > .main {
+  flex: 1;
+}
+.app > .statusbar {
+  height: 24px;
+  flex: none;
 }
 .app.drag-over::after {
   content: "";
@@ -287,6 +304,7 @@ textarea:focus {
 }
 .panel.left {
   border-right: 1px solid var(--line);
+  flex-direction: column;
 }
 .panel.right {
   width: 270px;
@@ -295,6 +313,158 @@ textarea:focus {
   overflow-x: hidden;
   flex-direction: column;
 }
+.panel-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 2px;
+  background: var(--bg);
+  border-right: 1px solid var(--line);
+}
+.main > .panel-bar:last-child {
+  border-right: none;
+  border-left: 1px solid var(--line);
+}
+.panel-bar button {
+  background: none;
+  border: none;
+  padding: 6px;
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.panel-bar button:hover {
+  color: var(--text);
+}
+.panel-bar button.active {
+  color: var(--accent);
+  background: var(--bg-3);
+}
+.context-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+.menu.context {
+  position: fixed;
+}
+.menu.context button.menu-item {
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* navigation bar, between the document and the Markups List */
+.navbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+  padding: 0 8px;
+  background: var(--bg-2);
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  flex: none;
+}
+.navbar form {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 4px;
+}
+.navbar input {
+  padding: 0 4px;
+  height: 20px;
+  font-size: 12px;
+}
+.navbar input.goto {
+  width: 70px;
+  text-align: center;
+}
+.navbar input.zoom {
+  width: 64px;
+  text-align: center;
+}
+.navbar .icon-btn {
+  min-width: 22px;
+  justify-content: center;
+  align-items: center;
+}
+.navbar .icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.navbar .icon-btn.on {
+  color: var(--accent);
+  background: var(--bg-4);
+}
+.navbar .icon-btn.wheel {
+  gap: 4px;
+  padding: 3px 6px;
+}
+.nav-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--line);
+  margin: 0 6px;
+}
+.navbar .spacer {
+  flex: 1;
+}
+.statusbar .coords {
+  min-width: 120px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* keyboard shortcuts */
+.dialog.shortcuts {
+  width: min(760px, 92vw);
+}
+.shortcuts-filter {
+  width: 100%;
+  padding: 4px 8px;
+  margin-bottom: 8px;
+}
+.shortcuts-list {
+  max-height: 60vh;
+  overflow-y: auto;
+  columns: 2 300px;
+  column-gap: 24px;
+}
+.shortcuts-list section {
+  break-inside: avoid;
+  margin-bottom: 12px;
+}
+.shortcuts-list h3 {
+  font-size: 12px;
+  color: var(--accent);
+  margin: 0 0 4px;
+}
+.shortcuts-list table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.shortcuts-list td {
+  padding: 2px 0;
+}
+.shortcuts-list td.keys {
+  text-align: right;
+  white-space: nowrap;
+}
+.shortcuts-list kbd {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--bg-3);
+  font-family: inherit;
+  font-size: 11px;
+}
+
 .panel-tabs {
   display: flex;
   flex-direction: column;

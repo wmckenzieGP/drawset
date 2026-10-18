@@ -16,7 +16,7 @@ test("mark search results and an area, review, apply: the text is gone from the 
   await drag(page, await pagePoint(page, 0.05, 0.8), await pagePoint(page, 0.3, 0.9));
   await expect.poll(async () => (await markups(page)).map((m) => m.kind).sort()).toEqual(["erase", "redact"]);
 
-  await page.getByTestId("menu-tools").click();
+  await page.getByTestId("menu-document").click();
   await page.getByRole("menuitem", { name: "Review and apply redactions…" }).click();
   await expect(page.getByTestId("redact-list").locator("li")).toHaveCount(2);
   const dl = page.waitForEvent("download");

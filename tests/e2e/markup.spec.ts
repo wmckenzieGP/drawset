@@ -112,13 +112,13 @@ test("save a copy keeps the document open and unsaved; flatten asks first", asyn
 
   // cancelling the confirmation changes nothing
   page.once("dialog", (d) => d.dismiss());
-  await page.getByTestId("menu-file").click();
+  await page.getByTestId("menu-document").click();
   await page.getByRole("menuitem", { name: "Flatten markups…" }).click();
   await expect(page.getByTestId("markup-count")).toHaveText("1 markup");
 
   page.once("dialog", (d) => d.accept());
   const dl = page.waitForEvent("download");
-  await page.getByTestId("menu-file").click();
+  await page.getByTestId("menu-document").click();
   await page.getByRole("menuitem", { name: "Flatten markups…" }).click();
   const bytes = new Uint8Array(readFileSync(await (await dl).path()));
   const doc = mupdf.Document.openDocument(bytes, "application/pdf").asPDF()!;

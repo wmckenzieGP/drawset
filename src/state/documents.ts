@@ -225,6 +225,37 @@ export interface SaveOptions {
   applyRedactions?: boolean;
 }
 
+/**
+ * Pages whose markups were brought forward or sent back since the last save, with their new drawing order.
+ * Only the order of markups on both sides counts: new ones are added on top and deleted ones simply go.
+ */
+function rearranged(saved: DocState, state: DocState, physOf: Map<string, number>): Record<number, string[]> | undefined {
+  const byPage = (s: DocState) => {
+    const out = new Map<string, string[]>();
+    for (const m of Object.values(s.markups)) {
+      if (m.kind === "foreign") continue;
+      const l = out.get(m.pageId) ?? [];
+      l.push(m.id);
+      out.set(m.pageId, l);
+    }
+    return out;
+  };
+  const before = byPage(saved);
+  const after = byPage(state);
+  let out: Record<number, string[]> | undefined;
+  for (const [pageId, ids] of after) {
+    const was = before.get(pageId) ?? [];
+    const both = new Set(was.filter((id) => state.markups[id]?.pageId === pageId));
+    const a = ids.filter((id) => both.has(id));
+    const b = was.filter((id) => both.has(id));
+    if (a.some((id, i) => id !== b[i])) {
+      const phys = physOf.get(pageId);
+      if (phys !== undefined) (out ??= {})[phys] = ids;
+    }
+  }
+  return out;
+}
+
 export function buildPlan(t: DocTab, state: DocState = t.state, opts: SaveOptions & { pageIds?: string[] } = {}): SavePlan {
   const pages = opts.pageIds ? opts.pageIds.map((id) => state.pages.find((p) => p.id === id)).filter((p): p is DocState["pages"][number] => !!p) : state.pages;
   const physOf = new Map(state.pages.map((p) => [p.id, p.src]));
@@ -249,6 +280,7 @@ export function buildPlan(t: DocTab, state: DocState = t.state, opts: SaveOption
   for (const m of Object.values(t.saved.markups)) {
     if (!state.markups[m.id] && m.objNum !== undefined) deletes.push(m.objNum);
   }
+  const order = rearranged(t.saved, state, physOf);
   // labels go by position: write them when one changed, or when pages moved in a file that has its own labels
   const labelsChanged = pages.some((p) => p.label !== p.info.label);
   const moved = pages.length !== t.info.pageCount || pages.some((p, i) => p.src !== i);
@@ -264,6 +296,7 @@ export function buildPlan(t: DocTab, state: DocState = t.state, opts: SaveOption
     pages: pages.map((p) => ({ index: p.src, rotate: (p.info.rotate + p.rotation) % 360, ...(sameScale(p.scale, p.info.scale) ? {} : { scale: p.scale }) })),
     upserts,
     deletes,
+    ...(order ? { order } : {}),
     flatten: opts.flatten,
     applyRedactions: opts.applyRedactions,
     defaultAuthor: useApp.getState().author,

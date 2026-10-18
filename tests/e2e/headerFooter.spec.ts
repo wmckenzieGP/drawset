@@ -10,7 +10,7 @@ test("add a footer with variables and a watermark, save, then remove them", asyn
   await page.goto("/");
   await openFixture(page, "set-200.pdf");
   await waitForPage(page);
-  await page.getByTestId("menu-page").click();
+  await page.getByTestId("menu-document").click();
   await page.getByRole("menuitem", { name: "Headers, footers and watermark…" }).click();
   const footer = page.getByTestId("hf-bc");
   await footer.click();
@@ -34,7 +34,7 @@ test("add a footer with variables and a watermark, save, then remove them", asyn
   expect(pageText(bytes, 41)).toContain("M-42");
 
   // the settings come back with the file and can be removed
-  await page.getByTestId("menu-page").click();
+  await page.getByTestId("menu-document").click();
   await page.getByRole("menuitem", { name: "Headers, footers and watermark…" }).click();
   await expect(page.getByTestId("hf-bc")).toHaveValue("Sheet {page} of {pages}");
   await page.getByTestId("hf-remove").click();

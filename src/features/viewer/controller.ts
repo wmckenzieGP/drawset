@@ -19,6 +19,9 @@ import { isMeasure } from "../../markup/measure";
 import { pageAt, type Layout, type PageLayout } from "./layout";
 import { markupsInRect } from "./markupIndex";
 
+/** Where the pointer is, in page space, for the status bar. */
+export const useCursor = create<{ pageId: string | null; pt: Pt | null }>(() => ({ pageId: null, pt: null }));
+
 export const useInteraction = create<{ editingId: string | null; cursor: string; spaceDown: boolean; title: string }>(() => ({ editingId: null, cursor: "default", spaceDown: false, title: "" }));
 
 export interface ViewerHost {
@@ -389,6 +392,8 @@ export class Controller {
       return;
     }
     const c = this.contentPoint(e);
+    const under = pageAt(this.host.layout(), c[0], c[1]);
+    useCursor.setState(under ? { pageId: under.entry.id, pt: this.toPage(under, c) } : { pageId: null, pt: null });
     if (d.t === "idle") {
       this.updateHover(c);
       // show what a click would snap to

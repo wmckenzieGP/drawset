@@ -49,3 +49,17 @@ Each item is about 2 hours or less. Tick `[x]` when its acceptance criteria pass
 - [x] T3.8 Crash recovery: journal unsaved markups every 60 s and offer to restore after a crash. *Accept:* after an unclean exit the next start lists each document with unsaved changes; restoring reopens the file and brings back markups, page order, rotation, labels, bookmarks, form values and headers as one undo step; saving or closing on purpose removes the journal.
 - [x] T3.9 OCR: invisible text layer for scanned pages with tesseract.js. Accept: a scanned sheet's notes are found by search in Drawset, MuPDF and pdf.js at the printed position; the page renders unchanged; undoable; works offline.
 - [x] T3.10 Tier 3 release v0.3 and final report. (Tag and installer wait on the workflows, S3.)
+
+## Tier 4 — Familiar workflow (after first use, 18/10/2026)
+William's first use: Drawset should work like the markup app his team already uses (same keys, same places, same page layouts), keeping Drawset's own names and icons.
+- [x] F1 Markups moved past the page edge stay selectable: dropped on another page they move to it (saved there once); otherwise they stay on their page. *Accept:* e2e drags a text box onto page 2 and selects it again; unit test saves it on page 2 with nothing left on page 1.
+- [x] F2 Page layouts: single page (Ctrl+4), continuous (Ctrl+5), side by side (Ctrl+6), continuous side by side (Ctrl+7), with page keys (Page Up/Down, Ctrl+Left/Right, Home, End). *Accept:* e2e checks one page, then a pair, then the column, and page steps.
+- [x] F3 Mouse wheel zooms or scrolls per layout (single: zoom, continuous: scroll by default), Ctrl swaps, switch on the navigation bar and in Preferences; scrolling past a single page turns to the next. *Accept:* e2e scroll, Ctrl+zoom, switch, page turn, remembered after reload.
+- [x] F4 Shortcuts from one key map, matching the familiar keys for every command Drawset has; menus, tooltips and the F1 list read it. *Accept:* e2e presses tool and panel keys and finds them in menus and the list.
+- [x] F5 Layout: menus File, Edit, View, Document, Tools, Window, Help; navigation bar under the document; status bar with Grid, Snap, Content, Markup, Reuse, Sync, sheet size, scale and pointer position; panels in bars on both sides, movable by right-click; bars can be hidden (F4, F8, F9). *Accept:* e2e moves a panel and toggles panels by key.
+- [x] F6 Bring forward / to front, send backward / to back (Ctrl+J, Ctrl+Shift+J, Ctrl+[, Ctrl+Shift+[), saved as the /Annots order. *Accept:* unit test saves and reads back the new order.
+- [ ] F7 Bookmarks: add (Ctrl+B), rename, delete and drag to reorder.
+- [ ] F8 Group and ungroup markups (Ctrl+G, Ctrl+Shift+G); Ctrl+drag copies; Ctrl+Shift+drag copies in a straight line.
+- [ ] F9 Text box: autosize (Alt+Z), typewriter tool (W); highlight tool draws a freehand highlight away from text.
+- [ ] F10 More markup tools with their keys: arc (Shift+C), dimension (Shift+L), Cloud+ (K), flag (Shift+F), radius, diameter, volume.
+- [ ] F11 Format painter (Ctrl+Shift+C) and Spaces/layers as needed after William's next round of use.

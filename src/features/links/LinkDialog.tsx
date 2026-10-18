@@ -5,7 +5,7 @@ import type { Rect } from "../../markup/geometry";
 import { nowIso, type LinkTarget, type Markup } from "../../markup/model";
 import { isDesktop, pickLocalFiles } from "../../platform/host";
 import { activeTab, commit, flash, updateTab, useApp, withMarkups } from "../../state/store";
-import { findPage } from "../../app/StatusBar";
+import { findPage } from "../../app/findPage";
 import { baseMarkup } from "../viewer/create";
 import { SAFE_URL } from "./navigate";
 

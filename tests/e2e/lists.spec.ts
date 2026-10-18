@@ -59,7 +59,6 @@ test("page operations from the thumbnails menu, undo, save", async ({ page }) =>
   await page.goto("/");
   await openFixture(page, "annotated.pdf");
   await waitForPage(page);
-  await page.getByTestId("panel-thumbnails").click();
   await page.getByTestId("thumb-0").click({ button: "right" });
   await page.getByRole("menuitem", { name: "Rotate clockwise" }).click();
   await page.getByTestId("thumb-0").click({ button: "right" });

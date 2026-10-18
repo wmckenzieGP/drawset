@@ -9,7 +9,7 @@ test("compare two revisions: each change gets a cloud listed in the Markups List
   await openFixture(page, "calibration-rev.pdf");
   await waitForPage(page);
 
-  await page.getByTestId("menu-tools").click();
+  await page.getByTestId("menu-document").click();
   await page.getByRole("menuitem", { name: "Compare documents…" }).click();
   await expect(page.getByTestId("overlay-canvas")).toHaveAttribute("data-ready", "1");
   await expect(page.getByTestId("overlay-a-file")).toHaveValue(/.+/);

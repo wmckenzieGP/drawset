@@ -23,7 +23,7 @@ test("recognise text on a scan offline, search it, undo and save", async ({ page
   await page.getByTestId("search-input").press("Enter");
   await expect(page.getByTestId("search-count")).toHaveText("0 results", { timeout: 20000 });
 
-  await page.getByTestId("menu-tools").click();
+  await page.getByTestId("menu-document").click();
   await page.getByRole("menuitem", { name: "Recognise text (OCR)…" }).click();
   await expect(page.getByTestId("ocr-dialog")).toBeVisible();
   await page.getByTestId("ocr-current").check();
@@ -53,7 +53,7 @@ test("recognise text on a scan offline, search it, undo and save", async ({ page
   expect(pageText(bytes)).toContain("HOSPITAL STAGE 2");
 
   // a second run skips the page, which now has text
-  await page.getByTestId("menu-tools").click();
+  await page.getByTestId("menu-document").click();
   await page.getByRole("menuitem", { name: "Recognise text (OCR)…" }).click();
   await page.getByTestId("ocr-start").click();
   await expect(page.getByText(/already has text|already have text/)).toBeVisible({ timeout: 20000 });
