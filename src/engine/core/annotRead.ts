@@ -202,6 +202,7 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
     repliesOf.set(parent, list);
   }
 
+  const idOfNum = new Map(entries.map((e) => [e.num, str(e.obj.get("NM")) || `obj-${e.num}`]));
   const out: MarkupRecord[] = [];
   for (const e of entries) {
     if (childNums.has(e.num)) continue;
@@ -356,6 +357,16 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
     }
     if (rec.kind !== "foreign" && rec.points.length > 0 && kind !== "callout") rec.rect = bboxOf(rec.points);
     if (kind === "pen" || kind === "highlighter") rec.rect = bboxOf(rec.inks.flat());
+    // grouped with another markup: /IRT to it with /RT /Group (followed to the group's first markup)
+    let root = num;
+    for (const seen = new Set<number>(); !seen.has(root); ) {
+      seen.add(root);
+      const o = entries.find((x) => x.num === root)?.obj;
+      const irt = o?.get("IRT");
+      if (!o || !irt?.isIndirect() || name(o.get("RT")) !== "Group" || !idOfNum.has(irt.asIndirect()) || childNums.has(irt.asIndirect())) break;
+      root = irt.asIndirect();
+    }
+    if (root !== num) rec.group = idOfNum.get(root);
     out.push(rec);
   }
   return out;

@@ -140,6 +140,8 @@ function MenuBar() {
         <C id="edit.delete" disabled={!sel} />
         <C id="edit.selectAll" />
         <Sep />
+        <C id="edit.group" disabled={!sel} />
+        <C id="edit.ungroup" disabled={!sel} />
         <C id="edit.lock" disabled={!sel} />
         <C id="edit.autosize" disabled={!sel} />
         <Menu.Sub>

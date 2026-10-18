@@ -587,7 +587,9 @@ export function deleteAnnotationTree(doc: mupdf.PDFDocument, page: mupdf.PDFPage
       if (doomed.has(num)) continue;
       const irt = a.get("IRT");
       const parent = a.get("Parent");
-      if ((irt.isIndirect() && doomed.has(irt.asIndirect())) || (a.get("Subtype").asName() === "Popup" && parent.isIndirect() && doomed.has(parent.asIndirect()))) {
+      // markups grouped with a deleted one stay (the app regroups them); replies and statuses go with it
+      const grouped = a.get("RT").isName() && a.get("RT").asName() === "Group";
+      if ((irt.isIndirect() && !grouped && doomed.has(irt.asIndirect())) || (a.get("Subtype").asName() === "Popup" && parent.isIndirect() && doomed.has(parent.asIndirect()))) {
         doomed.add(num);
         grew = true;
       }
@@ -600,6 +602,35 @@ export function deleteAnnotationTree(doc: mupdf.PDFDocument, page: mupdf.PDFPage
     keep.push(a);
   }
   pageObj.put("Annots", keep);
+}
+
+/**
+ * Links grouped markups on the page: each member gets /IRT to the group's first markup and /RT /Group.
+ * Markups no longer in a group lose those keys. Runs after every markup on the page is written, so new ones have objects.
+ */
+export function writeGroups(ctx: WriteContext, markups: Markup[]) {
+  const { doc, page } = ctx;
+  const annots = page.getObject().get("Annots");
+  if (!annots.isArray()) return;
+  const byId = new Map<string, mupdf.PDFObject>();
+  for (let i = 0; i < annots.length; i++) {
+    const a = annots.get(i);
+    const nm = a.get("NM");
+    if (a.isIndirect() && nm.isString()) byId.set(nm.asString(), a);
+  }
+  for (const m of markups) {
+    const ref = byId.get(m.id);
+    if (!ref) continue;
+    const obj = ref.resolve();
+    const target = m.group && m.group !== m.id ? byId.get(m.group) : undefined;
+    if (target) {
+      obj.put("IRT", target);
+      obj.put("RT", doc.newName("Group"));
+    } else if (obj.get("RT").isName() && obj.get("RT").asName() === "Group") {
+      obj.delete("IRT");
+      obj.delete("RT");
+    }
+  }
 }
 
 export function invertCtm(ctm: Matrix): Matrix {

@@ -495,7 +495,41 @@ export function withMarkups(s: DocState, changed: Markup[], removed: string[] = 
   const markups = { ...s.markups };
   for (const id of removed) delete markups[id];
   for (const m of changed) markups[m.id] = m;
+  if (removed.length || changed.some((m) => m.group)) fixGroups(markups);
   return { ...s, markups };
+}
+
+/** The group a markup belongs to: the id of the group's first markup, or its own id. */
+export const groupKey = (m: Markup) => m.group ?? m.id;
+
+/** `ids` plus every markup grouped with one of them. */
+export function withGroups(markups: Record<string, Markup>, ids: string[]): string[] {
+  const keys = new Set(ids.map((id) => markups[id]).filter(Boolean).map(groupKey));
+  if (!keys.size) return ids;
+  const out = new Set(ids);
+  for (const m of Object.values(markups)) if (keys.has(groupKey(m))) out.add(m.id);
+  return [...out];
+}
+
+/**
+ * Keeps groups consistent after markups are removed or moved: when a group's first markup is gone the next one
+ * takes its place, a markup on another page than its group's first leaves the group, and a group of one is no group.
+ */
+function fixGroups(markups: Record<string, Markup>) {
+  const members = new Map<string, Markup[]>();
+  for (const m of Object.values(markups)) if (m.group) members.set(m.group, [...(members.get(m.group) ?? []), m]);
+  for (const [key, list] of members) {
+    let lead = markups[key];
+    let rest = list;
+    if (!lead) {
+      // the first markup was removed: the next one leads the group
+      lead = { ...list[0], group: undefined };
+      markups[lead.id] = lead;
+      rest = list.slice(1);
+    }
+    const stay = rest.filter((m) => m.pageId === lead.pageId);
+    for (const m of rest) markups[m.id] = { ...m, group: stay.includes(m) ? lead.id : undefined };
+  }
 }
 
 export function markupsOnPage(s: DocState, pageId: string): Markup[] {

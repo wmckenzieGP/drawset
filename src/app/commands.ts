@@ -1,10 +1,10 @@
 /** Commands shared by menus, toolbar and keyboard shortcuts. */
-import { cloneMarkup } from "../markup/edit";
+import { cloneMarkup, relinkGroups } from "../markup/edit";
 import { textBoxHeight, textPadding, textWidth } from "../markup/appearance";
 import { newId, nowIso, type Markup, type ReviewStatus } from "../markup/model";
 import { closeTab, openWithDialog, saveActive, saveCopyOf, saveTab } from "../state/documents";
 import { chooseImageTool } from "./images";
-import { activeTab, commit, isContinuous, flash, redo, setView, undo, updateTab, useApp, withMarkups, showPanel, type PageMode, type PanelId, type Rotation, type ToolId } from "../state/store";
+import { activeTab, commit, isContinuous, flash, redo, setView, undo, updateTab, useApp, withGroups, withMarkups, showPanel, type PageMode, type PanelId, type Rotation, type ToolId } from "../state/store";
 import { jumpTo } from "../features/links/navigate";
 import { pageStep, shownFrom } from "../features/viewer/layout";
 import { clampScale } from "../features/viewer/Viewer";
@@ -128,14 +128,35 @@ export const cmd = {
   closeAll: async () => {
     for (const t of [...useApp.getState().tabs]) if (!(await closeTab(t.key))) return;
   },
+  /** Groups the selected markups (Ctrl+G): they are then selected, moved and copied together. */
+  group: () =>
+    withActive((k) => {
+      const t = activeTab()!;
+      const ms = withGroups(t.state.markups, t.selection).map((id) => t.state.markups[id]).filter(Boolean);
+      if (ms.length < 2) return flash("Select two or more markups to group.");
+      if (new Set(ms.map((m) => m.pageId)).size > 1) return flash("Only markups on the same page can be grouped.", "error");
+      const lead = ms.find((m) => m.id === t.selection[0]) ?? ms[0];
+      const now = nowIso();
+      commit(k, "Group", (s) => withMarkups(s, ms.map((m) => ({ ...m, group: m.id === lead.id ? undefined : lead.id, modified: now }))));
+      updateTab(k, (x) => ({ ...x, selection: ms.map((m) => m.id) }));
+    }),
+  /** Breaks up the groups in the selection (Ctrl+Shift+G). */
+  ungroup: () =>
+    withActive((k) => {
+      const t = activeTab()!;
+      const ids = withGroups(t.state.markups, t.selection);
+      const ms = ids.map((id) => t.state.markups[id]).filter((m) => m?.group);
+      if (!ms.length) return flash("The selection is not grouped.");
+      const now = nowIso();
+      commit(k, "Ungroup", (s) => withMarkups(s, ms.map((m) => ({ ...m, group: undefined, modified: now }))));
+      updateTab(k, (x) => ({ ...x, selection: ids }));
+    }),
   duplicate: () =>
     withActive((k) => {
       const t = activeTab()!;
       const author = useApp.getState().author;
-      const copies = t.selection
-        .map((id) => t.state.markups[id])
-        .filter((m) => m && m.kind !== "foreign")
-        .map((m) => cloneMarkup(m, newId(), m.pageId, 12, 12, author));
+      const originals = t.selection.map((id) => t.state.markups[id]).filter((m) => m && m.kind !== "foreign");
+      const copies = relinkGroups(originals, originals.map((m) => cloneMarkup(m, newId(), m.pageId, 12, 12, author)));
       if (!copies.length) return;
       commit(k, "Duplicate", (s) => withMarkups(s, copies));
       updateTab(k, (x) => ({ ...x, selection: copies.map((c) => c.id) }));
@@ -187,10 +208,14 @@ function pasteOnto(offset: boolean) {
     const sameDoc = clipboard.docId === t.docId;
     const author = useApp.getState().author;
     const source = clipboard.markups.filter((m) => sameDoc || !(m.keepAppearance || m.kind === "foreign"));
-    const copies = source.filter((m) => m.kind !== "foreign").map((m) => {
-      const samePage = m.pageId === page.id;
-      return cloneMarkup(m, newId(), page.id, offset && samePage ? 12 : 0, offset && samePage ? 12 : 0, author);
-    });
+    const originals = source.filter((m) => m.kind !== "foreign");
+    const copies = relinkGroups(
+      originals,
+      originals.map((m) => {
+        const samePage = m.pageId === page.id;
+        return cloneMarkup(m, newId(), page.id, offset && samePage ? 12 : 0, offset && samePage ? 12 : 0, author);
+      }),
+    );
     if (!copies.length) return;
     commit(k, "Paste", (s) => withMarkups(s, copies));
     updateTab(k, (x) => ({ ...x, selection: copies.map((c) => c.id) }));

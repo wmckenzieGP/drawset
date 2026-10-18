@@ -11,9 +11,9 @@ import { markupBounds } from "../../markup/appearance";
 import { clickField } from "../forms/forms";
 import { openLinkDialog } from "../links/LinkDialog";
 import { describeTarget, followLink } from "../links/navigate";
-import { canResize, cloneMarkup, hitTest, scaleBetween, setVertex, translate, vertexHandles, withDerivedRect } from "../../markup/edit";
+import { canResize, cloneMarkup, hitTest, relinkGroups, scaleBetween, setVertex, translate, vertexHandles, withDerivedRect } from "../../markup/edit";
 import { KIND_LABELS, newId, nowIso, type Markup, type MarkupKind } from "../../markup/model";
-import { commit, flash, updateTab, useApp, withMarkups, type DocTab, type ToolId } from "../../state/store";
+import { commit, flash, updateTab, useApp, withGroups, withMarkups, type DocTab, type ToolId } from "../../state/store";
 import { boxMarkup, calloutAt, imageAt, inkMarkup, measureAt, noteAt, stampAt, textBoxAt, textMarkup, vertexMarkup } from "./create";
 import { isMeasure } from "../../markup/measure";
 import { pageAt, type Layout, type PageLayout } from "./layout";
@@ -293,20 +293,22 @@ export class Controller {
       }
       if (hit) {
         let sel = tab.selection;
+        // grouped markups are picked together
+        const group = withGroups(tab.state.markups, [hit.id]);
         if (e.ctrlKey || e.metaKey) {
           // Ctrl+drag copies (Ctrl+Shift+drag in a straight line); a Ctrl+click without moving adds or removes it
-          const ids = sel.includes(hit.id) ? sel : [...sel, hit.id];
+          const ids = sel.includes(hit.id) ? sel : [...sel, ...group.filter((id) => !sel.includes(id))];
           const originals = ids.map((id) => tab.state.markups[id]).filter((m) => m && m.kind !== "foreign" && m.pageId === target.entry.id);
           this.drag = { t: "move", page: target, start: p, last: p, originals, moved: false, copy: { toggle: hit.id } };
           return;
         }
         if (e.shiftKey) {
-          sel = sel.includes(hit.id) ? sel.filter((x) => x !== hit.id) : [...sel, hit.id];
+          sel = sel.includes(hit.id) ? sel.filter((x) => !group.includes(x)) : [...sel, ...group.filter((id) => !sel.includes(id))];
           this.setSelection(sel);
           return;
         }
         if (!sel.includes(hit.id)) {
-          sel = [hit.id];
+          sel = group;
           this.setSelection(sel);
         }
         const originals = sel.map((id) => tab.state.markups[id]).filter((m) => m && !m.locked && m.pageId === target.entry.id);
@@ -542,19 +544,20 @@ export class Controller {
       case "marquee": {
         const r = normRect([d.a[0], d.a[1], d.b[0], d.b[1]]);
         const inside = markupsInRect(tab.state.markups, d.page.entry.id, r).filter((m) => !m.hidden && rectContains(r, markupBounds(m)));
-        const ids = inside.map((m) => m.id);
+        const ids = withGroups(tab.state.markups, inside.map((m) => m.id));
         this.setSelection(d.additive ? [...new Set([...tab.selection, ...ids])] : ids);
         break;
       }
       case "move":
         if (d.copy && !d.moved) {
           const id = d.copy.toggle;
-          this.setSelection(tab.selection.includes(id) ? tab.selection.filter((x) => x !== id) : [...tab.selection, id]);
+          const group = withGroups(tab.state.markups, [id]);
+          this.setSelection(tab.selection.includes(id) ? tab.selection.filter((x) => !group.includes(x)) : [...tab.selection, ...group.filter((x) => !tab.selection.includes(x))]);
           break;
         }
         if (d.copy && d.originals.length) {
           const author = useApp.getState().author;
-          const copies = d.originals.map((m) => cloneMarkup(m, newId(), m.pageId, 0, 0, author));
+          const copies = relinkGroups(d.originals, d.originals.map((m) => cloneMarkup(m, newId(), m.pageId, 0, 0, author)));
           const placed = this.placeMoved(d.page, d.at ?? null, copies.map((m) => translate(m, d.last[0] - d.start[0], d.last[1] - d.start[1])));
           commit(tab.key, placed.length > 1 ? "Copy markups" : "Copy markup", (s) => withMarkups(s, placed));
           this.setSelection(placed.map((m) => m.id));

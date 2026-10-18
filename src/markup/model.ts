@@ -129,6 +129,8 @@ export interface Markup {
   measure?: MeasureData;
   /** Hyperlink target (link kind). */
   link?: LinkTarget;
+  /** Grouped markups: the id of the group's first markup (written as /IRT to it with /RT /Group). Absent on that first markup itself. */
+  group?: string;
 }
 
 /** Where a link goes. Pages are physical page indices in the open document (0-based). */

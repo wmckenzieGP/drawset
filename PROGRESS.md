@@ -63,3 +63,4 @@ William used the installed v0.3 and asked for it to work like the app his team a
 
 
 Then (18/10/2026): bookmarks can be added for the current page (Ctrl+B), renamed (F2 or double-click), deleted and dragged to reorder or nest, all undoable and saved. Ctrl+drag copies markups (Ctrl+Shift+drag keeps it straight) and Ctrl+click adds to or removes from the selection. Alt+Z fits a text box to its text. The highlight tool dragged over empty space paints a highlighter band instead of highlighting distant text. 123 unit and 38 browser tests pass.
+Grouping (18/10/2026): Ctrl+G groups the selected markups on a page and Ctrl+Shift+G ungroups them. A click on one picks the whole group, so it moves, copies and deletes together. Groups are saved the standard way (/IRT to the first markup with /RT /Group), so other editors see them, and read back; deleting the first markup passes the lead to the next. 124 unit and 39 browser tests pass.

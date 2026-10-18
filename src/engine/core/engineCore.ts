@@ -7,7 +7,7 @@ import { concat, displayMatrix, type Matrix, type Pt, type Quad, type Rect, scal
 import type { Markup } from "../../markup/model";
 import type { Decoration, DocInfo, FormField, OcrImage, OcrPage, ImagePdfPage, SnapGeometry, MarkupRecord, OutlineNode, PageInfo, RenderRequest, SavePlan, SearchHit } from "../types";
 import { readPageMarkups } from "./annotRead";
-import { deleteAnnotationTree, ensurePopup, invertCtm, PRIVATE_KEY, subtypeFor, writeLink, writeMarkup, writeReplies, writeStatus, type WriteContext } from "./annotWrite";
+import { deleteAnnotationTree, ensurePopup, invertCtm, PRIVATE_KEY, subtypeFor, writeGroups, writeLink, writeMarkup, writeReplies, writeStatus, type WriteContext } from "./annotWrite";
 import { buildImagePdf } from "./imagePdf";
 import { collectSnapGeometry } from "./snapGeometry";
 import { readFields, setFieldValues } from "./forms";
@@ -407,6 +407,7 @@ export class EngineCore {
         if (markup.kind !== "foreign") writeStatus(ctx, obj, markup);
         writeReplies(ctx, obj, markup);
       }
+      writeGroups(ctx, items.map((x) => x.markup));
     }
     for (const [pageIndex, ids] of Object.entries(plan.order ?? {})) {
       const i = Number(pageIndex);

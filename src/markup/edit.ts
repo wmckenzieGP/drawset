@@ -172,6 +172,15 @@ function captionBounds(m: Markup): Rect | null {
 }
 
 /** Clone a markup with a fresh id, offset, author and dates (paste/duplicate). */
+/** Copies of grouped markups form their own group: `copies[i]` is the copy of `originals[i]`. */
+export function relinkGroups(originals: Markup[], copies: Markup[]): Markup[] {
+  const idOf = new Map(originals.map((m, i) => [m.id, copies[i].id]));
+  return copies.map((c, i) => {
+    const g = originals[i].group;
+    return { ...c, group: g ? idOf.get(g) : undefined };
+  });
+}
+
 export function cloneMarkup(m: Markup, id: string, pageId: string, dx: number, dy: number, author: string): Markup {
   const t = translate(m, dx, dy);
   const now = nowIso();

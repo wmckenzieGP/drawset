@@ -222,3 +222,33 @@ test("Ctrl+B adds a bookmark for the current page, renames it, and it is saved",
   const flat = (l: Item[]): Item[] => l.flatMap((o) => [o, ...flat(o.down ?? [])]);
   expect(flat((saved.loadOutline() ?? []) as Item[]).find((o) => o.title === "Level 2 services")?.page).toBe(2);
 });
+
+test("Ctrl+G groups markups: clicking one picks them all, they move together, Ctrl+Shift+G ungroups", async ({ page }) => {
+  await page.goto("/");
+  await openFixture(page, "calibration.pdf");
+  await waitForPage(page);
+  await page.keyboard.press("r");
+  await drag(page, await pagePoint(page, 0.1, 0.1), await pagePoint(page, 0.2, 0.2));
+  await page.keyboard.press("e");
+  await drag(page, await pagePoint(page, 0.4, 0.1), await pagePoint(page, 0.5, 0.2));
+  await page.keyboard.press("v");
+  const [a, b] = await markups(page);
+  await page.keyboard.press("Control+a");
+  await page.keyboard.press("Control+g");
+  // click elsewhere, then on the rectangle: both are selected
+  const empty = await pagePoint(page, 0.7, 0.7);
+  await page.mouse.click(empty.x, empty.y);
+  const edge = await pagePoint(page, 0.1, 0.17);
+  await page.mouse.click(edge.x, edge.y);
+  expect((await state(page)).selection.sort()).toEqual([a.id, b.id].sort());
+  // dragging one moves both
+  await drag(page, edge, await pagePoint(page, 0.1, 0.37), 10);
+  const moved = await markups(page);
+  for (const m of [a, b]) expect(moved.find((x) => x.id === m.id)!.rect[1]).toBeGreaterThan(m.rect[1] + 10);
+  // ungroup: a click picks just one
+  await page.keyboard.press("Control+Shift+g");
+  await page.mouse.click(empty.x, empty.y);
+  const edge2 = await pagePoint(page, 0.1, 0.37);
+  await page.mouse.click(edge2.x, edge2.y);
+  expect((await state(page)).selection).toEqual([a.id]);
+});
