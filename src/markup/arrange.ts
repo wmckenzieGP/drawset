@@ -1,5 +1,5 @@
 /** Aligning, flipping and copying formats between markups. Pure: each returns changed copies. */
-import { markupBounds, textBoxHeight, textPadding, textWidth } from "./appearance";
+import { markupBounds, textBoxHeight, textPadding, textWidth, wrapText } from "./appearance";
 import { translate } from "./edit";
 import type { Pt, Quad, Rect } from "./geometry";
 import { nowIso, type Markup, type MarkupKind, type MarkupStyle } from "./model";
@@ -29,12 +29,30 @@ export function keptWithin(page: Rect, ms: Markup[]): Markup[] {
   return dx || dy ? ms.map((m) => translate(m, dx, dy)) : ms;
 }
 
-/** A text box or callout sized to its text: as wide as its longest line, as tall as its lines. */
+/**
+ * A text box or callout shrunk (or grown) around its text as it is laid out now: the lines wrap where they do at
+ * the current width, the box becomes as wide as the longest of them and as tall as all of them.
+ */
 export function fitToText(m: Markup): Markup {
   const s = m.style;
   const pad = textPadding(m);
+  const r = m.rect;
+  const lines = wrapText(s.fontFamily, s.fontSize, m.contents, Math.max(1, r[2] - r[0] - 2 * pad));
+  return sized(m, Math.max(0, ...lines.map((l) => textWidth(s.fontFamily, s.fontSize, l))));
+}
+
+/** A text box or callout as wide as its longest paragraph (each on one line), as for pasted text. */
+export function fitToLines(m: Markup): Markup {
+  const s = m.style;
   const lines = m.contents.replace(/\r\n?/g, "\n").split("\n");
-  const w = Math.max(...lines.map((l) => textWidth(s.fontFamily, s.fontSize, l))) + 2 * pad + 1;
+  return sized(m, Math.max(0, ...lines.map((l) => textWidth(s.fontFamily, s.fontSize, l))));
+}
+
+/** `m` with its top left kept and its text area `textW` wide (plus a point, so no line wraps again). */
+function sized(m: Markup, textW: number): Markup {
+  const s = m.style;
+  const pad = textPadding(m);
+  const w = textW + 2 * pad + 1;
   const h = textBoxHeight(s.fontFamily, s.fontSize, m.contents, w, pad);
   const r = m.rect;
   return { ...m, rect: [r[0], r[1], r[0] + w, r[1] + h], modified: nowIso() };

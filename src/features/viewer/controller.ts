@@ -17,7 +17,7 @@ import { changeLive, commit, flash, settleLive, showPanel, updateTab, useApp, us
 import { eraseStrokes, simplifyStroke } from "../../markup/ink";
 import { boxMarkup, calloutAt, imageAt, inkMarkup, measureAt, noteAt, signatureAt, stampAt, textBoxAt, textMarkup, vertexMarkup } from "./create";
 import { dimensionLine, isMeasure } from "../../markup/measure";
-import { keptWithin, paintedStyle } from "../../markup/arrange";
+import { paintedStyle } from "../../markup/arrange";
 import { useCursor } from "./cursor";
 export { useCursor };
 import { pageAt, type Layout, type PageLayout } from "./layout";
@@ -39,6 +39,10 @@ export interface ViewerHost {
   redraw(): void;
   zoomToRect(page: PageLayout, r: Rect): void;
   zoomBy(factor: number, clientX: number, clientY: number): void;
+  /** Scrolls to (`left`, `top`) while dragging the view, past the pages' edges if need be; returns how far the content moved to make room. */
+  panTo(left: number, top: number): [number, number];
+  /** The drag is over: drops room around the pages that is no longer in view. */
+  panEnd(): void;
 }
 
 type Handle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
@@ -351,7 +355,7 @@ export class Controller {
       let target = page;
       let hit = page ? this.hitAt(tab, page, this.toPage(page, c)) : null;
       if (!hit) {
-        // a markup lying off its own page (moved there by an older version, or by another editor) can still be picked
+        // a markup hanging off its own page, or lying beside it, is picked where it is drawn
         const stray = this.strayHit(tab, c);
         if (stray) [target, hit] = [stray.page, stray.hit];
       }
@@ -454,7 +458,7 @@ export class Controller {
     return null;
   }
 
-  /** A markup outside its own page's box under the pointer, on a page near the pointer. */
+  /** A markup outside its own page's box under the pointer (hanging off the page or over the next one), on a page near the pointer. */
   private strayHit(tab: DocTab, c: Pt): { page: PageLayout; hit: Markup } | null {
     const pages = this.host.layout().pages;
     const near = pages.filter((pl) => c[1] >= pl.y - pl.h && c[1] <= pl.y + 2 * pl.h);
@@ -467,7 +471,7 @@ export class Controller {
 
   /**
    * Where moved markups land. Dropped on another page, they go onto that page at the same spot on screen;
-   * otherwise they are kept on their own page, never left hanging off its edge where nothing could select them.
+   * otherwise they stay on their own page. Either way they may hang off the page's edge or over the next page.
    */
   private placeMoved(from: PageLayout, at: Pt | null, ms: Markup[]): Markup[] {
     const target = at ? pageAt(this.host.layout(), at[0], at[1]) : null;
@@ -477,9 +481,9 @@ export class Controller {
       const centre: Pt = [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2];
       const onScreen = apply(from.m, centre);
       const there = this.toPage(target, [onScreen[0] + from.x, onScreen[1] + from.y]);
-      return keepOnPage(target, ms.map((m) => ({ ...translate(m, there[0] - centre[0], there[1] - centre[1]), pageId: target.entry.id })));
+      return ms.map((m) => ({ ...translate(m, there[0] - centre[0], there[1] - centre[1]), pageId: target.entry.id }));
     }
-    return keepOnPage(from, ms);
+    return ms;
   }
 
   pointerMove(e: PointerEvent) {
@@ -487,8 +491,10 @@ export class Controller {
     const el = this.host.scrollEl();
     if (!el) return;
     if (d.t === "pan") {
-      el.scrollLeft = d.left - (e.clientX - d.sx);
-      el.scrollTop = d.top - (e.clientY - d.sy);
+      // the page follows the pointer every way, past the window's edges too
+      const [mx, my] = this.host.panTo(d.left - (e.clientX - d.sx), d.top - (e.clientY - d.sy));
+      d.left += mx;
+      d.top += my;
       return;
     }
     const c = this.contentPoint(e);
@@ -619,7 +625,8 @@ export class Controller {
       else {
         const tab = this.host.tab();
         const page = pageAt(this.host.layout(), c[0], c[1]);
-        const hit = tab && page ? this.hitAt(tab, page, this.toPage(page, c)) : null;
+        // a markup hanging off its page counts too
+        const hit = tab ? ((page ? this.hitAt(tab, page, this.toPage(page, c)) : null) ?? this.strayHit(tab, c)?.hit ?? null) : null;
         if (hit?.kind === "link" && hit.link && !tab!.selection.includes(hit.id)) {
           cursor = "pointer";
           title = [hit.contents, describeTarget(tab!, hit.link)].filter(Boolean).join("\n");
@@ -637,6 +644,7 @@ export class Controller {
     const tab = this.host.tab();
     if (d.t === "pan") {
       this.drag = { t: "idle" };
+      this.host.panEnd();
       useInteraction.setState({ cursor: this.tool === "pan" || useInteraction.getState().spaceDown ? "grab" : "default" });
       return;
     }
@@ -898,7 +906,7 @@ export class Controller {
     const o = apply(pl.inv, [0, 0]);
     const v = apply(pl.inv, [dx, dy]);
     const [px, py] = [v[0] - o[0], v[1] - o[1]];
-    const moved = keepOnPage(pl, ms.filter((m) => m.pageId === pl.entry.id).map((m) => translate(m, px, py)));
+    const moved = ms.filter((m) => m.pageId === pl.entry.id).map((m) => translate(m, px, py));
     commit(tab.key, "Move", (s) => withMarkups(s, moved), "nudge");
     return true;
   }
@@ -997,11 +1005,6 @@ function showComment() {
 }
 
 const inRect = (r: Rect, p: Pt) => p[0] >= r[0] && p[0] <= r[2] && p[1] >= r[1] && p[1] <= r[3];
-
-/** Shifts markups (as a group) just enough that they lie within the page. */
-export function keepOnPage(page: PageLayout, ms: Markup[]): Markup[] {
-  return keptWithin(page.entry.info.bounds, ms);
-}
 
 /** The point on a closed outline nearest to `p`. */
 export function nearestOnOutline(pts: readonly Pt[], p: Pt): Pt {

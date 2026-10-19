@@ -138,7 +138,9 @@ export function drawOverlay(p: OverlayParams) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, p.width * dpr, p.height * dpr);
   }
-  const [first, last] = visibleRange(layout, p.scrollTop, p.scrollTop + p.height);
+  // one page more each way, for markups hanging off a page into the window
+  const [shownFirst, shownLast] = visibleRange(layout, p.scrollTop, p.scrollTop + p.height);
+  const [first, last] = [Math.max(0, shownFirst - 1), Math.min(layout.pages.length - 1, shownLast + 1)];
   const selected = new Set(tab.selection);
   const preview = controller.preview();
   // links without a border are outlined while the Link tool is in use, or when selected

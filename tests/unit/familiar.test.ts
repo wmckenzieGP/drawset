@@ -4,7 +4,7 @@ import { insertAt, moveBookmark, removeAt } from "../../src/features/viewer/Book
 import { fitToText } from "../../src/app/commands";
 import { commandFor, COMMANDS } from "../../src/app/keymap";
 import { computeLayout } from "../../src/features/viewer/layout";
-import { textBoxHeight, textPadding } from "../../src/markup/appearance";
+import { textBoxHeight, textPadding, textWidth, wrapText } from "../../src/markup/appearance";
 import { mk } from "./helpers/markups";
 import { aligned, flipped, paintedStyle } from "../../src/markup/arrange";
 import { markupBounds } from "../../src/markup/appearance";
@@ -58,6 +58,24 @@ describe("autosize", () => {
     expect(f.rect[3] - f.rect[1]).toBeCloseTo(textBoxHeight(m.style.fontFamily, m.style.fontSize, m.contents, f.rect[2] - f.rect[0], textPadding(m)));
     // nothing wraps at the new width: two lines
     expect(f.rect[3] - f.rect[1]).toBeCloseTo(2 * m.style.fontSize * 1.2 + 2 * textPadding(m) - m.style.fontSize * 0.2);
+  });
+
+  it("keeps a wrapped paragraph wrapped where it is, and only shrinks the box around it", () => {
+    const text = "Contractor to confirm the duct route above the ceiling before ordering fittings. Allow for fire dampers at every wall crossing.";
+    const m = mk("callout", { rect: [100, 100, 300, 140], points: [[50, 300], [100, 120]], contents: text });
+    const pad = textPadding(m);
+    const { fontFamily: font, fontSize: size } = m.style;
+    const before = wrapText(font, size, text, 200 - 2 * pad);
+    expect(before.length).toBeGreaterThan(3);
+    const f = fitToText(m);
+    const w = f.rect[2] - f.rect[0];
+    // the same lines, in a box no wider than the widest of them, tall enough for all of them
+    expect(wrapText(font, size, text, w - 2 * pad)).toEqual(before);
+    expect(w).toBeLessThanOrEqual(200);
+    expect(w).toBeCloseTo(Math.max(...before.map((l) => textWidth(font, size, l))) + 2 * pad + 1);
+    expect(f.rect[3] - f.rect[1]).toBeCloseTo(textBoxHeight(font, size, text, w, pad));
+    expect(f.rect.slice(0, 2)).toEqual([100, 100]);
+    expect(f.points).toEqual(m.points);
   });
 });
 

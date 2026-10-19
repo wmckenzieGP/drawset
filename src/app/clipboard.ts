@@ -2,7 +2,7 @@
  * Copy and paste. Copied markups paste where the pointer is (or where a right-click menu was opened); Paste in
  * place keeps their spot. A picture or text copied in another program pastes as an image or a text box.
  */
-import { centredOn, fitToText, keptWithin } from "../markup/arrange";
+import { centredOn, fitToLines, keptWithin } from "../markup/arrange";
 import { cloneMarkup, relinkGroups } from "../markup/edit";
 import type { Pt } from "../markup/geometry";
 import { newId, type Markup, type MarkupImage } from "../markup/model";
@@ -92,7 +92,7 @@ export function pasteMarkups(at: PastePoint | null, inPlace = false) {
 
 /** A text box holding pasted text, with its middle on `at`. */
 function pasteText(t: DocTab, at: PastePoint, text: string) {
-  const box = fitToText({ ...textBoxAt(at.pageId, at.pt, null), contents: text.replace(/\r\n?/g, "\n").trimEnd() });
+  const box = fitToLines({ ...textBoxAt(at.pageId, at.pt, null), contents: text.replace(/\r\n?/g, "\n").trimEnd() });
   place(t, atSpot(t, at, [box]), "Paste text");
 }
 
