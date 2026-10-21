@@ -102,3 +102,6 @@ Markups are drawn on canvases inside the scrolling content, moved to the visible
 
 ## 39. A callout's box moves without its arrow tip (21/10/2026)
 A callout picked up by its text box moves the box and the leader's bend, and the arrow tip stays on what it points at, as in the familiar app. Picked up by its leader line, or moved as part of a larger selection or group, the whole callout moves. Arrow-key nudges still move the whole callout, since there is no grab point to tell the two apart. A box dragged over the next page stays on its own page (its tip is there) and hangs over the next one.
+
+## 40. Fill opacity and Highlight use PDF 2.0's own keys (21/10/2026)
+A markup's fill opacity is written as the annotation's /ca and its line opacity as /CA, and Highlight as /BM /Multiply, which is how ISO 32000-2 describes them; the appearance stream's graphics state carries the same values, so older viewers draw it right too. Without a fill opacity of its own a fill follows the line, as before, so existing files and tool sets are unchanged. Text in a text box or callout keeps the line opacity (a second graphics state, /GS1, puts it back), so a see-through background does not fade the words. The pen is left out of Highlight because a multiplied ink annotation is how the highlighter is recognised when a file is opened; the highlighter tool covers that use.

@@ -54,8 +54,12 @@ export interface MarkupStyle {
   color: RGB | null;
   /** Interior fill; null means no fill. */
   fill: RGB | null;
-  /** 0–1, written as /CA. */
+  /** 0–1, written as /CA: lines and text, and the fill too unless `fillOpacity` is set. */
   opacity: number;
+  /** Fill opacity 0–1, written as /ca; absent means the same as `opacity`. */
+  fillOpacity?: number;
+  /** "Multiply" is the Highlight option: the drawing and text underneath show through, as under a highlighter. Written as /BM. */
+  blend?: "Multiply";
   /** Line width in points. */
   width: number;
   /** Dash pattern in points, null for solid. */

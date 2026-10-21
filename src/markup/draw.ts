@@ -24,15 +24,19 @@ function tracePath(ctx: CanvasRenderingContext2D, op: PathOp) {
 const CAPS: CanvasLineCap[] = ["butt", "round", "square"];
 const JOINS: CanvasLineJoin[] = ["miter", "round", "bevel"];
 
-export function drawOp(ctx: CanvasRenderingContext2D, op: DrawOp, image?: CanvasImageSource | null) {
+/** `alpha`: the opacity of lines and text, and of fills; when absent the context's own alpha is used for both. */
+export function drawOp(ctx: CanvasRenderingContext2D, op: DrawOp, image?: CanvasImageSource | null, alpha?: { line: number; fill: number }) {
+  if (alpha) ctx.globalAlpha = alpha.line;
   if (op.t === "path") {
     if (!op.fill && !op.stroke) return;
     tracePath(ctx, op);
     if (op.fill) {
+      if (alpha) ctx.globalAlpha = alpha.fill;
       ctx.fillStyle = rgbCss(op.fill);
       ctx.fill(op.evenOdd ? "evenodd" : "nonzero");
     }
     if (op.stroke) {
+      if (alpha) ctx.globalAlpha = alpha.line;
       ctx.strokeStyle = rgbCss(op.stroke);
       ctx.lineWidth = op.width;
       ctx.lineCap = CAPS[op.cap ?? 0];
@@ -55,7 +59,7 @@ export function drawOp(ctx: CanvasRenderingContext2D, op: DrawOp, image?: Canvas
 /** Draws an appearance; the caller has set the page-space transform on `ctx`. */
 export function drawAppearance(ctx: CanvasRenderingContext2D, ap: Appearance, image?: CanvasImageSource | null) {
   ctx.save();
-  ctx.globalAlpha = ap.opacity;
-  for (const op of ap.ops) drawOp(ctx, op, image);
+  const alpha = { line: ap.opacity, fill: ap.fillOpacity };
+  for (const op of ap.ops) drawOp(ctx, op, image, alpha);
   ctx.restore();
 }

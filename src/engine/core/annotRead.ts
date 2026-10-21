@@ -2,6 +2,7 @@
 import * as mupdf from "mupdf";
 import { apply, bboxOf, type Matrix, type Pt, type Quad, type Rect, transformRect } from "../../markup/geometry";
 import { DEFAULT_STYLE, type FontFamily, type LineEnd, LINE_ENDS, type MarkupImage, type MarkupKind, type Reply, type ReviewStatus, type RGB } from "../../markup/model";
+import { HIGHLIGHT_KINDS } from "../../markup/appearance";
 import type { MarkupRecord } from "../types";
 import { PRIVATE_KEY } from "./annotWrite";
 import { readMeasure, safePageScale } from "./measureDict";
@@ -271,6 +272,7 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
     const color = rgb(obj.get("C"));
     const fill = rgb(obj.get("IC"));
     const ca = obj.get("CA");
+    const fillCa = obj.get("ca");
     const le = obj.get("LE");
     const leNames = le.isArray() ? [name(le.get(0)), name(le.get(1))] : le.isName() ? [le.asName(), "None"] : ["None", "None"];
     const created = parsePdfDate(str(obj.get("CreationDate")));
@@ -281,6 +283,8 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
       color,
       fill,
       opacity: ca.isNumber() ? ca.asNumber() : 1,
+      ...(fillCa.isNumber() ? { fillOpacity: fillCa.asNumber() } : {}),
+      ...(name(obj.get("BM")) === "Multiply" && HIGHLIGHT_KINDS.has(kind) ? { blend: "Multiply" as const } : {}),
       width: width >= 0 ? width : 1,
       dash: dashArr.length ? dashArr : null,
       lineStart: lineEnd(leNames[0]),

@@ -43,6 +43,8 @@ export interface PdfAppearance {
   fonts: TextFont[];
   /** True when the content uses /GS0 (opacity or blend). */
   usesGState: boolean;
+  /** True when text is drawn under /GS1, whose fill opacity is the line opacity (the fill's own opacity differs). */
+  usesTextGState: boolean;
   /** Image XObject /Im0 is referenced. */
   usesImage: boolean;
 }
@@ -51,7 +53,7 @@ function colourOp(c: [number, number, number], stroke: boolean) {
   return `${n(c[0])} ${n(c[1])} ${n(c[2])} ${stroke ? "RG" : "rg"}`;
 }
 
-function opContent(op: DrawOp, fonts: Set<TextFont>): string {
+function opContent(op: DrawOp, fonts: Set<TextFont>, textGState: boolean): string {
   if (op.t === "path") {
     if (!op.fill && !op.stroke) return "";
     const parts: string[] = [];
@@ -77,7 +79,9 @@ function opContent(op: DrawOp, fonts: Set<TextFont>): string {
       .filter((l) => l.s.length > 0)
       .map((l) => `1 0 0 -1 ${n(l.x)} ${n(l.y)} Tm ${winAnsiLiteral(l.s)} Tj`);
     if (lines.length === 0) return "";
-    return `BT\n${colourOp(op.color, false)}\n/${res} ${n(op.size)} Tf\n${lines.join("\n")}\nET`;
+    const text = `BT\n${colourOp(op.color, false)}\n/${res} ${n(op.size)} Tf\n${lines.join("\n")}\nET`;
+    // text is painted with the fill opacity, so when the fill has its own, text takes the line opacity back
+    return textGState ? `q /GS1 gs\n${text}\nQ` : text;
   }
   // image: unit square mapped to rect, flipped because page space is y-down
   const r = op.rect;
@@ -89,8 +93,10 @@ function opContent(op: DrawOp, fonts: Set<TextFont>): string {
  */
 export function appearanceToPdf(ap: Appearance, pageToUser: Matrix): PdfAppearance {
   const fonts = new Set<TextFont>();
-  const body = ap.ops.map((op) => opContent(op, fonts)).filter(Boolean);
-  const usesGState = ap.opacity < 1 || ap.blend !== "Normal";
+  const textGState = ap.fillOpacity !== ap.opacity;
+  const body = ap.ops.map((op) => opContent(op, fonts, textGState)).filter(Boolean);
+  const usesGState = ap.opacity < 1 || ap.fillOpacity < 1 || ap.blend !== "Normal";
+  const usesTextGState = body.some((b) => b.startsWith("q /GS1 gs"));
   const usesImage = ap.ops.some((o) => o.t === "image");
   const m = pageToUser;
   const content = [
@@ -102,5 +108,5 @@ export function appearanceToPdf(ap: Appearance, pageToUser: Matrix): PdfAppearan
   ]
     .filter(Boolean)
     .join("\n");
-  return { content, bbox: transformRect(ap.bbox, pageToUser), fonts: [...fonts], usesGState, usesImage };
+  return { content, bbox: transformRect(ap.bbox, pageToUser), fonts: [...fonts], usesGState, usesTextGState, usesImage };
 }

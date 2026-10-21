@@ -116,13 +116,13 @@ const TEXT_KINDS = new Set<MarkupKind>(["textbox", "callout"]);
 const END_KINDS = new Set<MarkupKind>(["line", "arrow", "polyline", "length", "polylength", "arc", "dimension", "callout"]);
 
 /**
- * `target`'s style with `source`'s format painted on: colour, fill, opacity, line width and style always;
+ * `target`'s style with `source`'s format painted on: colour, fill, opacity (fill opacity and Highlight too), line width and style always;
  * line ends, cloud size and text settings only where both markups have them. A text box's missing border
  * does not take the outline off a shape.
  */
 export function paintedStyle(source: Markup, target: Markup): MarkupStyle {
   const s = source.style;
-  const out: MarkupStyle = { ...target.style, fill: s.fill, opacity: s.opacity, width: s.width, dash: s.dash };
+  const out: MarkupStyle = { ...target.style, fill: s.fill, opacity: s.opacity, fillOpacity: s.fillOpacity, blend: s.blend, width: s.width, dash: s.dash };
   if (s.color || TEXT_KINDS.has(target.kind)) out.color = s.color;
   if (END_KINDS.has(source.kind) && END_KINDS.has(target.kind)) [out.lineStart, out.lineEnd] = [s.lineStart, s.lineEnd];
   if (source.kind === "cloud" && target.kind === "cloud") out.cloudIntensity = s.cloudIntensity;

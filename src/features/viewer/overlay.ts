@@ -1,5 +1,5 @@
 /** Draws markups, selection, handles, previews and search hits on the overlay canvases. */
-import { buildAppearance } from "../../markup/appearance";
+import { blendOf, buildAppearance } from "../../markup/appearance";
 import { drawAppearance } from "../../markup/draw";
 import { type Quad } from "../../markup/geometry";
 import type { Markup } from "../../markup/model";
@@ -172,12 +172,12 @@ export function drawOverlay(p: OverlayParams) {
         drawMarkup(normal, tab, page, { ...m, contents: "" }, scale * dpr);
         continue;
       }
-      const ctx = m.kind === "highlight" || m.kind === "highlighter" || m.kind === "area" ? multiply : normal;
+      const ctx = blendOf(m) === "Multiply" ? multiply : normal;
       drawMarkup(ctx, tab, page, m, scale * dpr);
       if (m.kind === "link" && !m.style.color && showLinks) linkHint(normal, m, scale * dpr);
     }
     if (preview && preview.page.entry.id === page.entry.id) {
-      const ctx = preview.m.kind === "highlight" || preview.m.kind === "highlighter" || preview.m.kind === "area" ? multiply : normal;
+      const ctx = blendOf(preview.m) === "Multiply" ? multiply : normal;
       for (const x of preview.with ?? []) drawMarkup(normal, tab, page, x, scale * dpr);
       drawMarkup(ctx, tab, page, preview.m, scale * dpr);
       if (preview.m.kind === "link") linkHint(normal, preview.m, scale * dpr);
