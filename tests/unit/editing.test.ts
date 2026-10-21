@@ -4,7 +4,7 @@ import { useNodeEngine } from "./helpers/nodeEngine";
 import type { EngineCore } from "../../src/engine/core/engineCore";
 import { activeTab, addTab, commit, undo, redo, updateTab, useApp, withMarkups } from "../../src/state/store";
 import { cmd } from "../../src/app/commands";
-import { hitTest, scaleBetween, setVertex, translate, cloneMarkup } from "../../src/markup/edit";
+import { hitTest, moveCalloutBox, scaleBetween, setVertex, translate, cloneMarkup } from "../../src/markup/edit";
 import { mk } from "./helpers/markups";
 
 let core: EngineCore;
@@ -25,6 +25,13 @@ describe("pure editing operations", () => {
     expect(t.points).toEqual([[3, 4], [13, 9]]);
     expect(t.rect).toEqual([3, 4, 13, 9]);
     expect(m.points).toEqual([[0, 0], [10, 5]]);
+  });
+  it("moves a callout's box and bend while its arrow tip stays where it points", () => {
+    const m = mk("callout", { points: [[10, 10], [40, 30]], rect: [52, 20, 152, 40], inks: [], quads: [] });
+    const t = moveCalloutBox(m, 25, -8);
+    expect(t.points).toEqual([[10, 10], [65, 22]]);
+    expect(t.rect).toEqual([77, 12, 177, 32]);
+    expect(moveCalloutBox({ ...m, points: [[10, 10]] }, 5, 5).points).toEqual([[10, 10]]);
   });
   it("resizes from one box to another", () => {
     const m = mk("pen", { rect: [0, 0, 10, 10], inks: [[[0, 0], [10, 10]]] });

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { textPadding, textBoxHeight } from "../../markup/appearance";
+import { textDrop, textPadding, textBoxHeight, wrapText } from "../../markup/appearance";
 import { rgbCss } from "../../markup/draw";
 import type { Rect } from "../../markup/geometry";
 import { nowIso, type Markup } from "../../markup/model";
@@ -40,7 +40,11 @@ export function TextEditor({ tab, markup, rect, scale }: { tab: DocTab; markup: 
   };
 
   const s = markup.style;
-  const pad = textPadding(markup) * scale;
+  const padPts = textPadding(markup);
+  const pad = padPts * scale;
+  // the lines sit at the top, middle or bottom of the box while typing, as they will when drawn
+  const lines = wrapText(s.fontFamily, s.fontSize, text, Math.max(1, markup.rect[2] - markup.rect[0] - 2 * padPts)).length;
+  const drop = textDrop(s.fontSize, lines, markup.rect[3] - markup.rect[1] - 2 * padPts, s.valign) * scale;
   return (
     <textarea
       ref={ref}
@@ -63,7 +67,10 @@ export function TextEditor({ tab, markup, rect, scale }: { tab: DocTab; markup: 
         top: rect[1],
         width: rect[2] - rect[0],
         minHeight: rect[3] - rect[1],
+        // with room to spare the box keeps its own height, so the padding above the lines does not stretch it
+        height: drop > 0 ? rect[3] - rect[1] : undefined,
         padding: pad,
+        paddingTop: pad + drop,
         fontSize: s.fontSize * scale,
         lineHeight: 1.2,
         fontFamily: CSS_FONTS[s.fontFamily],

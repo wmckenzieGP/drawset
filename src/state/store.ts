@@ -111,6 +111,8 @@ export type ToolId =
   | "chest"
   /** Draws the title-block box that pages are labelled from. */
   | "labelregion"
+  /** Copies a dragged area of a page, with its markups, as a picture. */
+  | "snapshot"
   /** A cloud with a callout leader and text, grouped. */
   | "cloudplus"
   /** Copies the format of `usePainter`'s source onto clicked markups. */

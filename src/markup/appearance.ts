@@ -46,8 +46,28 @@ export interface Appearance {
   ops: DrawOp[];
   /** Bounds of everything drawn, in page space (including stroke width). */
   bbox: Rect;
+  /** Lines and text. */
   opacity: number;
+  /** Fills. */
+  fillOpacity: number;
   blend: "Normal" | "Multiply";
+}
+
+/** Kinds always drawn like a highlighter, so the drawing shows through. */
+const MULTIPLY_KINDS = new Set<Markup["kind"]>(["highlight", "highlighter", "area", "volume"]);
+/** Kinds whose fill has its own opacity. */
+export const FILL_OPACITY_KINDS = new Set<Markup["kind"]>(["rectangle", "ellipse", "polygon", "cloud", "textbox", "callout", "area", "volume"]);
+/** Kinds that offer the Highlight option. The rest already blend that way, have nothing to blend, or (the pen) would be read back as the highlighter. */
+export const HIGHLIGHT_KINDS = new Set<Markup["kind"]>(["rectangle", "ellipse", "polygon", "cloud", "line", "arrow", "polyline", "arc", "textbox", "callout"]);
+
+/** The opacity of a markup's fill: its own for kinds that have one, otherwise the same as its lines. */
+export function fillOpacityOf(m: Markup): number {
+  return FILL_OPACITY_KINDS.has(m.kind) ? (m.style.fillOpacity ?? m.style.opacity) : m.style.opacity;
+}
+
+/** How a markup is laid over the page: "Multiply" lets the drawing and text underneath show through. */
+export function blendOf(m: Markup): Appearance["blend"] {
+  return MULTIPLY_KINDS.has(m.kind) || (m.style.blend === "Multiply" && HIGHLIGHT_KINDS.has(m.kind)) ? "Multiply" : "Normal";
 }
 
 const K = 0.5522847498;
@@ -238,14 +258,24 @@ export function wrapText(font: TextFont, size: number, text: string, maxWidth: n
 export const LINE_HEIGHT = 1.2;
 const ASCENT = 0.8;
 
-export function layoutText(font: TextFont, size: number, text: string, box: Rect, pad: number, align: 0 | 1 | 2) {
+export function layoutText(font: TextFont, size: number, text: string, box: Rect, pad: number, align: 0 | 1 | 2, valign: 0 | 1 | 2 = 0) {
   const innerW = Math.max(1, box[2] - box[0] - 2 * pad);
   const lines = wrapText(font, size, text, innerW);
+  const top = box[1] + pad + textDrop(size, lines.length, box[3] - box[1] - 2 * pad, valign);
   return lines.map((s, i) => {
     const w = textWidth(font, size, s);
     const x = align === 0 ? box[0] + pad : align === 1 ? (box[0] + box[2]) / 2 - w / 2 : box[2] - pad - w;
-    return { x, y: box[1] + pad + size * ASCENT + i * size * LINE_HEIGHT, s };
+    return { x, y: top + size * ASCENT + i * size * LINE_HEIGHT, s };
   });
+}
+
+/**
+ * How far below the top padding `lines` lines of text start in `room` points of height: none at the top, half the
+ * spare height in the middle, all of it at the bottom. Text too tall for its box starts at the top.
+ */
+export function textDrop(size: number, lines: number, room: number, valign: 0 | 1 | 2 = 0): number {
+  const spare = room - (Math.max(1, lines) * size * LINE_HEIGHT - size * (LINE_HEIGHT - 1));
+  return valign === 0 || spare <= 0 ? 0 : valign === 1 ? spare / 2 : spare;
 }
 
 /** Height a text box needs for its text at the given width. */
@@ -423,7 +453,7 @@ function textBoxOps(m: Markup): DrawOp[] {
     ops.push({ t: "path", segs: rectSegs(inflate(m.rect, -inset)), fill: s.fill, stroke, width: s.width, dash: s.dash });
   }
   if (m.contents) {
-    ops.push({ t: "text", font: s.fontFamily, size: s.fontSize, color: s.textColor, lines: layoutText(s.fontFamily, s.fontSize, m.contents, m.rect, textPadding(m), s.align) });
+    ops.push({ t: "text", font: s.fontFamily, size: s.fontSize, color: s.textColor, lines: layoutText(s.fontFamily, s.fontSize, m.contents, m.rect, textPadding(m), s.align, s.valign) });
   }
   return ops;
 }
@@ -611,7 +641,6 @@ function redactOps(m: Markup): DrawOp[] {
 export function buildAppearance(m: Markup): Appearance {
   const s = m.style;
   const ops: DrawOp[] = [];
-  let blend: Appearance["blend"] = "Normal";
   const stroke = s.color && s.width > 0 ? s.color : null;
   switch (m.kind) {
     case "rectangle":
@@ -640,7 +669,6 @@ export function buildAppearance(m: Markup): Appearance {
       break;
     case "pen":
     case "highlighter":
-      if (m.kind === "highlighter") blend = "Multiply";
       if (stroke) ops.push({ t: "path", segs: m.inks.flatMap(inkSegs), fill: null, stroke, width: s.width, dash: null, cap: 1, join: 1 });
       break;
     case "textbox":
@@ -653,7 +681,6 @@ export function buildAppearance(m: Markup): Appearance {
       ops.push(...noteOps(m));
       break;
     case "highlight":
-      blend = "Multiply";
       ops.push(...textMarkupOps(m));
       break;
     case "underline":
@@ -674,8 +701,7 @@ export function buildAppearance(m: Markup): Appearance {
       break;
     case "area":
     case "volume":
-      // multiply lets the drawing show through a solid, pale fill while lines and caption stay crisp
-      blend = "Multiply";
+      // multiply (see blendOf) lets the drawing show through a solid, pale fill while lines and caption stay crisp
       ops.push(...measureOps(m));
       break;
     case "length":
@@ -705,7 +731,7 @@ export function buildAppearance(m: Markup): Appearance {
   // box kinds keep /Rect equal to their frame so the frame survives save and reopen exactly
   // (for redactions /Rect is the area to remove, so it must be exactly the frame)
   const frameIsBox = m.kind === "textbox" || m.kind === "stamp" || m.kind === "image" || m.kind === "signature" || m.kind === "note" || m.kind === "redact" || m.kind === "erase" || m.kind === "link";
-  return { ops, bbox: frameIsBox ? m.rect : opsBounds(ops, m), opacity: s.opacity, blend };
+  return { ops, bbox: frameIsBox ? m.rect : opsBounds(ops, m), opacity: s.opacity, fillOpacity: fillOpacityOf(m), blend: blendOf(m) };
 }
 
 export function segPoints(segs: readonly Seg[]): Pt[] {

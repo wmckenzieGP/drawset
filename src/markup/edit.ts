@@ -27,6 +27,12 @@ export function translate(m: Markup, dx: number, dy: number): Markup {
   };
 }
 
+/** A callout's text box moved on its own: the box and the leader's bend go with it, the arrow tip stays where it points. */
+export function moveCalloutBox(m: Markup, dx: number, dy: number): Markup {
+  const moved = translate(m, dx, dy);
+  return m.points.length ? { ...moved, points: [m.points[0], ...moved.points.slice(1)] } : moved;
+}
+
 /** Maps every coordinate from box `from` to box `to` (resize). */
 export function scaleBetween(m: Markup, from: Rect, to: Rect): Markup {
   const sx = (to[2] - to[0]) / (from[2] - from[0] || 1);
@@ -179,7 +185,7 @@ export function hitTest(m: Markup, p: Pt, tol: number): boolean {
   }
 }
 
-function pointInRect(p: Pt, r: Rect | null): boolean {
+export function pointInRect(p: Pt, r: Rect | null): boolean {
   return !!r && p[0] >= r[0] && p[0] <= r[2] && p[1] >= r[1] && p[1] <= r[3];
 }
 

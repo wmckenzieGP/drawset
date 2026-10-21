@@ -3,7 +3,7 @@ import { describeTarget, followLink } from "../links/navigate";
 import { ReplyThread } from "../replies/ReplyThread";
 import { useEffect, useRef, useState } from "react";
 import { colourHex, FONT_FAMILIES, formatDate, hexColour, KIND_LABELS, LINE_ENDS, nowIso, STATUSES, type Markup, type MarkupKind, type MarkupStyle, type ReviewStatus } from "../../markup/model";
-import { textBoxHeight, textPadding } from "../../markup/appearance";
+import { FILL_OPACITY_KINDS, HIGHLIGHT_KINDS, textBoxHeight, textPadding } from "../../markup/appearance";
 import { commit, defaultStyleFor, useApp, withMarkups, type DocTab } from "../../state/store";
 import { cmd } from "../../app/commands";
 import { openSignatures } from "../signature/signatures";
@@ -75,10 +75,23 @@ function StyleEditor({ kinds, style, onStyle }: { kinds: MarkupKind[]; style: Ma
       {all(COLOUR_KINDS) && <ColourField label={kinds.every((k) => TEXT_KINDS.has(k)) ? "Border colour" : "Colour"} value={style.color} allowNone={kinds.every((k) => TEXT_KINDS.has(k) || k === "rectangle" || k === "ellipse" || k === "polygon" || k === "link")} onChange={(v) => onStyle({ color: v }, "colour")} testId="prop-colour" />}
       {all(FILL_KINDS) && <ColourField label={kinds.every((k) => END_KINDS.has(k)) ? "Arrowhead fill" : "Fill"} value={style.fill} allowNone onChange={(v) => onStyle({ fill: v }, "fill")} testId="prop-fill" />}
       <label className="prop-row">
-        <span>Opacity</span>
+        <span>{all(FILL_OPACITY_KINDS) && !kinds.every((k) => TEXT_KINDS.has(k)) ? "Line opacity" : "Opacity"}</span>
         <input type="range" min={5} max={100} value={Math.round(style.opacity * 100)} onChange={(e) => onStyle({ opacity: Number(e.target.value) / 100 }, "opacity")} data-testid="prop-opacity" />
         <span className="prop-value">{Math.round(style.opacity * 100)}%</span>
       </label>
+      {all(FILL_OPACITY_KINDS) && (
+        <label className="prop-row">
+          <span>Fill opacity</span>
+          <input type="range" min={0} max={100} value={Math.round((style.fillOpacity ?? style.opacity) * 100)} disabled={!style.fill} onChange={(e) => onStyle({ fillOpacity: Number(e.target.value) / 100 }, "fillOpacity")} data-testid="prop-fill-opacity" />
+          <span className="prop-value">{Math.round((style.fillOpacity ?? style.opacity) * 100)}%</span>
+        </label>
+      )}
+      {all(HIGHLIGHT_KINDS) && (
+        <label className="prop-row" title="Blends like a highlighter, so the drawing and text underneath stay visible">
+          <span>Highlight</span>
+          <input type="checkbox" checked={style.blend === "Multiply"} onChange={(e) => onStyle({ blend: e.target.checked ? "Multiply" : undefined }, "")} data-testid="prop-highlight" />
+        </label>
+      )}
       {all(WIDTH_KINDS) && (
         <label className="prop-row">
           <span>Line width</span>
@@ -154,6 +167,14 @@ function StyleEditor({ kinds, style, onStyle }: { kinds: MarkupKind[]; style: Ma
               <option value={0}>Left</option>
               <option value={1}>Centre</option>
               <option value={2}>Right</option>
+            </select>
+          </label>
+          <label className="prop-row">
+            <span>Vertical</span>
+            <select value={style.valign ?? 0} onChange={(e) => onStyle({ valign: Number(e.target.value) as 0 | 1 | 2 }, "valign")} data-testid="prop-valign">
+              <option value={0}>Top</option>
+              <option value={1}>Middle</option>
+              <option value={2}>Bottom</option>
             </select>
           </label>
         </>

@@ -114,6 +114,7 @@ export const COMMANDS: Command[] = [
   tool("pan", "Pan", ["Shift+V"], "Select"),
   tool("zoom", "Zoom", ["Z"], "Select"),
   tool("text", "Select text", ["Shift+T"], "Select"),
+  tool("snapshot", "Snapshot", ["G"], "Select"),
   // markup
   tool("textbox", "Text box", ["T"], "Markup"),
   tool("callout", "Callout", ["Q"], "Markup"),

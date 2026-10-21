@@ -11,12 +11,13 @@ import { markupBounds } from "../../markup/appearance";
 import { clickField } from "../forms/forms";
 import { openLinkDialog } from "../links/LinkDialog";
 import { describeTarget, followLink } from "../links/navigate";
-import { canResize, cloneMarkup, hitTest, relinkGroups, scaleBetween, setVertex, translate, vertexHandles, withDerivedRect } from "../../markup/edit";
+import { canResize, cloneMarkup, hitTest, moveCalloutBox, pointInRect, relinkGroups, scaleBetween, setVertex, translate, vertexHandles, withDerivedRect } from "../../markup/edit";
 import { formatDate, KIND_LABELS, newId, nowIso, type Markup, type MarkupKind } from "../../markup/model";
 import { changeLive, commit, flash, settleLive, showPanel, updateTab, useApp, usePainter, withGroups, withMarkups, type DocState, type DocTab, type ToolId } from "../../state/store";
 import { eraseStrokes, simplifyStroke } from "../../markup/ink";
 import { boxMarkup, calloutAt, imageAt, inkMarkup, measureAt, noteAt, signatureAt, stampAt, textBoxAt, textMarkup, vertexMarkup } from "./create";
 import { dimensionLine, isMeasure } from "../../markup/measure";
+import { takeSnapshot } from "../snapshot/snapshot";
 import { paintedStyle } from "../../markup/arrange";
 import { useCursor } from "./cursor";
 export { useCursor };
@@ -53,10 +54,11 @@ type DragState =
   | { t: "idle" }
   | { t: "pan"; sx: number; sy: number; left: number; top: number; button: number }
   | { t: "marquee"; page: PageLayout; a: Pt; b: Pt; additive: boolean }
-  | { t: "move"; page: PageLayout; start: Pt; last: Pt; originals: Markup[]; moved: boolean; at?: Pt; copy?: { toggle: string } }
+  /** `tipStays`: a lone callout picked up by its text box, which moves without its arrow tip. */
+  | { t: "move"; page: PageLayout; start: Pt; last: Pt; originals: Markup[]; moved: boolean; at?: Pt; copy?: { toggle: string }; tipStays?: boolean }
   | { t: "resize"; page: PageLayout; original: Markup; handle: Handle; frame: Rect; current: Markup }
   | { t: "vertex"; page: PageLayout; original: Markup; index: number; current: Markup }
-  | { t: "box"; kind: MarkupKind | "zoom" | "labelregion" | "cloudplus"; page: PageLayout; a: Pt; b: Pt; moved: boolean }
+  | { t: "box"; kind: MarkupKind | "zoom" | "labelregion" | "cloudplus" | "snapshot"; page: PageLayout; a: Pt; b: Pt; moved: boolean }
   | { t: "line"; kind: "line" | "arrow" | "length" | "calibrate" | "radius" | "diameter"; page: PageLayout; a: Pt; b: Pt }
   /** `plus`: the cloud a Cloud+ callout belongs to; the text is placed with a click after the cloud is drawn. */
   | { t: "callout"; page: PageLayout; tip: Pt; b: Pt; plus?: Markup }
@@ -76,7 +78,7 @@ export const useCalibrationPick = create<{ pick: { pageId: string; a: Pt; b: Pt 
 
 /** Tools whose points snap. Freehand, text and zoom tools do not. */
 const SNAP_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "line", "arrow", "polyline", "polygon", "cloud", "textbox", "callout", "note", "stamp", "image", "length", "polylength", "area", "perimeter", "count", "angle", "calibrate", "cutout", "redact", "erase", "chest", "link", "cloudplus", "arc", "dimension", "volume", "radius", "diameter"]);
-const BOX_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "textbox", "stamp", "image", "signature", "zoom", "redact", "erase", "labelregion", "link", "cloudplus"]);
+const BOX_TOOLS = new Set<ToolId>(["rectangle", "ellipse", "textbox", "stamp", "image", "signature", "zoom", "redact", "erase", "labelregion", "link", "cloudplus", "snapshot"]);
 /** Tools that place a ready-made markup: it follows the pointer until the click that places it. */
 const GHOST_TOOLS = new Set<ToolId>(["stamp", "signature"]);
 const TEXT_TOOLS = new Set<ToolId>(["text", "highlight", "underline", "strikeout"]);
@@ -180,9 +182,15 @@ export class Controller {
     if ((d.t === "resize" || d.t === "vertex") && d.original.id === m.id) return d.current;
     if (d.t === "move" && d.moved && !d.copy) {
       const o = d.originals.find((x) => x.id === m.id);
-      if (o) return translate(o, d.last[0] - d.start[0], d.last[1] - d.start[1]);
+      if (o) return this.shifted(d, o);
     }
     return m;
+  }
+
+  /** A markup where the move has taken it so far. */
+  private shifted(d: Extract<DragState, { t: "move" }>, m: Markup): Markup {
+    const [dx, dy] = [d.last[0] - d.start[0], d.last[1] - d.start[1]];
+    return d.tipStays ? moveCalloutBox(m, dx, dy) : translate(m, dx, dy);
   }
 
   /** In-progress markup to draw as a preview. */
@@ -202,7 +210,7 @@ export class Controller {
         // a copy being dragged shows where it will go; the original stays put
         return d.copy && d.moved && d.originals[0] ? { page: d.page, m: translate(d.originals[0], d.last[0] - d.start[0], d.last[1] - d.start[1]) } : null;
       case "box": {
-        if (!d.moved || d.kind === "zoom" || d.kind === "labelregion") return null;
+        if (!d.moved || d.kind === "zoom" || d.kind === "labelregion" || d.kind === "snapshot") return null;
         if (d.kind === "stamp") return { page: d.page, m: stampAt(d.page.entry.id, d.a, d.b) };
         if (d.kind === "image" || d.kind === "signature") {
           const m = d.kind === "image" ? imageAt(d.page.entry.id, d.a, d.b) : signatureAt(d.page.entry.id, d.a, d.b);
@@ -239,7 +247,7 @@ export class Controller {
   marquee(): { page: PageLayout; r: Rect } | null {
     const d = this.drag;
     if (d.t === "marquee") return { page: d.page, r: normRect([d.a[0], d.a[1], d.b[0], d.b[1]]) };
-    if (d.t === "box" && (d.kind === "zoom" || d.kind === "labelregion") && d.moved) return { page: d.page, r: normRect([d.a[0], d.a[1], d.b[0], d.b[1]]) };
+    if (d.t === "box" && (d.kind === "zoom" || d.kind === "labelregion" || d.kind === "snapshot") && d.moved) return { page: d.page, r: normRect([d.a[0], d.a[1], d.b[0], d.b[1]]) };
     return null;
   }
 
@@ -390,7 +398,10 @@ export class Controller {
           this.setSelection(sel);
         }
         const originals = sel.map((id) => tab.state.markups[id]).filter((m) => m && !m.locked && m.pageId === target.entry.id);
-        this.drag = { t: "move", page: target, start: p, last: p, originals, moved: false };
+        // a callout on its own, picked up by its text box, leaves its arrow tip where it points; by its leader it moves whole
+        const one = originals.length === 1 ? originals[0] : null;
+        const tipStays = one?.kind === "callout" && pointInRect(p, inflate(one.rect, this.tol(target, 4)));
+        this.drag = { t: "move", page: target, start: p, last: p, originals, moved: false, tipStays };
         return;
       }
       if (!e.shiftKey && !e.ctrlKey && tab.fields?.length && clickField(tab, target.entry.src, p)) return;
@@ -422,7 +433,7 @@ export class Controller {
     }
     const p = SNAP_TOOLS.has(tool) ? this.snapAt(page, raw, e) : raw;
     if (BOX_TOOLS.has(tool)) {
-      this.drag = { t: "box", kind: tool as MarkupKind | "zoom" | "labelregion" | "cloudplus", page, a: p, b: p, moved: false };
+      this.drag = { t: "box", kind: tool as MarkupKind | "zoom" | "labelregion" | "cloudplus" | "snapshot", page, a: p, b: p, moved: false };
     } else if (tool === "line" || tool === "arrow" || tool === "length" || tool === "calibrate" || tool === "radius" || tool === "diameter") {
       this.drag = { t: "line", kind: tool, page, a: p, b: p };
     } else if (tool === "callout") {
@@ -553,7 +564,7 @@ export class Controller {
         break;
       }
       case "box":
-        d.b = e.shiftKey ? snapSquare(d.a, p) : d.kind === "zoom" || d.kind === "labelregion" ? p : this.snapAt(d.page, p, e);
+        d.b = e.shiftKey ? snapSquare(d.a, p) : d.kind === "zoom" || d.kind === "labelregion" || d.kind === "snapshot" ? p : this.snapAt(d.page, p, e);
         if (!d.moved && dist(d.a, d.b) > this.tol(d.page, 3)) d.moved = true;
         break;
       case "line":
@@ -674,7 +685,9 @@ export class Controller {
           break;
         }
         if (d.moved && d.originals.length) {
-          const moved = this.placeMoved(d.page, d.at ?? null, d.originals.map((m) => translate(m, d.last[0] - d.start[0], d.last[1] - d.start[1])));
+          const shifted = d.originals.map((m) => this.shifted(d, m));
+          // a callout's tip stays on its page, so its box may reach over the next page rather than move there
+          const moved = d.tipStays ? shifted : this.placeMoved(d.page, d.at ?? null, shifted);
           commit(tab.key, d.originals.length > 1 ? "Move markups" : "Move markup", (s) => withMarkups(s, moved));
         }
         break;
@@ -689,6 +702,11 @@ export class Controller {
         if (d.kind === "labelregion") {
           if (d.moved) useLabelRegionPick.setState({ pick: { pageId: pid, rect: normRect([d.a[0], d.a[1], d.b[0], d.b[1]]) } });
           useApp.setState((s) => ({ tools: { ...s.tools, tool: "select", chest: null } }));
+          break;
+        }
+        if (d.kind === "snapshot") {
+          if (d.moved) void takeSnapshot(tab, pid, normRect([d.a[0], d.a[1], d.b[0], d.b[1]]));
+          if (!useApp.getState().tools.reuse) useApp.setState((s) => ({ tools: { ...s.tools, tool: "select" } }));
           break;
         }
         if (d.kind === "link") {

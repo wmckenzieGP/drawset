@@ -155,3 +155,71 @@ test("properties panel changes are single undo steps and reach the saved file", 
   expect(line.get("BS").get("S").asName()).toBe("D");
   expect(line.get("LE").get(0).asName()).toBe("Circle");
 });
+
+test("a box's fill opacity is set apart from its line's, and Highlight lets the drawing show through", async ({ page }) => {
+  await page.getByTestId("tool-rectangle").click();
+  await drag(page, await pagePoint(page, 0.3, 0.3), await pagePoint(page, 0.6, 0.5));
+  await page.getByTestId("prop-fill").fill("#ffff00");
+  await page.getByTestId("prop-opacity").fill("80");
+  await page.getByTestId("prop-fill-opacity").fill("40");
+  await page.getByTestId("prop-highlight").check();
+  const style = () => page.evaluate(() => {
+    const s = (window as any).__drawset.useApp.getState();
+    const t = s.tabs.find((x: any) => x.key === s.active);
+    return (Object.values(t.state.markups)[0] as any).style;
+  });
+  expect(await style()).toMatchObject({ fill: [1, 1, 0], opacity: 0.8, fillOpacity: 0.4, blend: "Multiply" });
+  // drawn on the layer that blends like a highlighter
+  const inked = () => page.evaluate(() => {
+    const c = document.querySelector<HTMLCanvasElement>(".overlay-multiply")!;
+    const d = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+    return n;
+  });
+  await expect.poll(inked).toBeGreaterThan(1000);
+  // Highlight off again is one undo away
+  await page.getByTestId("prop-highlight").uncheck();
+  expect((await style()).blend).toBeUndefined();
+  await expect.poll(inked).toBe(0);
+  await page.keyboard.press("Control+z");
+  expect((await style()).blend).toBe("Multiply");
+
+  const dl = page.waitForEvent("download");
+  await page.getByTestId("tb-save").click();
+  const bytes = new Uint8Array(readFileSync(await (await dl).path()));
+  const doc = mupdf.Document.openDocument(bytes, "application/pdf").asPDF()!;
+  const sq = (doc.loadPage(0) as mupdf.PDFPage).getAnnotations().find((a) => a.getType() === "Square")!.getObject();
+  expect(sq.get("CA").asNumber()).toBeCloseTo(0.8, 3);
+  expect(sq.get("ca").asNumber()).toBeCloseTo(0.4, 3);
+  expect(sq.get("BM").asName()).toBe("Multiply");
+});
+
+test("text in a text box goes to the top, middle or bottom, while typing too", async ({ page }) => {
+  await page.keyboard.press("t");
+  await drag(page, await pagePoint(page, 0.3, 0.2), await pagePoint(page, 0.5, 0.5));
+  await page.getByTestId("text-editor").fill("Riser 3");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("v");
+  await page.getByTestId("prop-valign").selectOption("Middle");
+  const style = () => page.evaluate(() => {
+    const s = (window as any).__drawset.useApp.getState();
+    const t = s.tabs.find((x: any) => x.key === s.active);
+    return (Object.values(t.state.markups)[0] as any).style;
+  });
+  expect((await style()).valign).toBe(1);
+  await page.getByTestId("prop-valign").selectOption("Bottom");
+  expect((await style()).valign).toBe(2);
+  // typing again, the line stays at the bottom of the box
+  await page.locator(".viewer").focus();
+  await page.keyboard.press("Enter");
+  const editor = page.getByTestId("text-editor");
+  await expect(editor).toBeVisible();
+  const [top, bottom, height] = await editor.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return [parseFloat(cs.paddingTop), parseFloat(cs.paddingBottom), el.getBoundingClientRect().height];
+  });
+  expect(top).toBeGreaterThan(height * 0.6);
+  expect(bottom).toBeLessThan(10);
+  await page.keyboard.press("Escape");
+});

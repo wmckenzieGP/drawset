@@ -9,7 +9,7 @@ import { annotationsPdfjs, renderPdfjs } from "./helpers/pdfjs";
 import { identityPages } from "./helpers/markups";
 
 const read = (n: string) => new Uint8Array(readFileSync(`fixtures/${n}`));
-const MANAGED = new Set(["Rect", "AP", "NM", "T", "Subj", "Contents", "CreationDate", "M", "F", "CA", "C", "IC", "BS", "Border", "RD", "BE", "IT", "L", "LE", "Vertices", "InkList", "BM", "DA", "DS", "RC", "Q", "CL", "QuadPoints", "Name", "Open", "DrawsetData", "Popup", "P"]);
+const MANAGED = new Set(["Rect", "AP", "NM", "T", "Subj", "Contents", "CreationDate", "M", "F", "CA", "ca", "C", "IC", "BS", "Border", "RD", "BE", "IT", "L", "LE", "Vertices", "InkList", "BM", "DA", "DS", "RC", "Q", "CL", "QuadPoints", "Name", "Open", "DrawsetData", "Popup", "P"]);
 
 /** Every annotation dictionary on every page keyed by /NM (or object number), as key → serialised value. */
 function snapshot(bytes: Uint8Array) {

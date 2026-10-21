@@ -6,7 +6,7 @@
 import * as mupdf from "mupdf";
 import { writeLinkTarget } from "./links";
 import { apply, dist, inflate, invert, type Matrix, type Pt, type Rect, transformRect } from "../../markup/geometry";
-import { arcPoints, buildAppearance, calloutLeader, type TextFont } from "../../markup/appearance";
+import { arcPoints, blendOf, buildAppearance, calloutLeader, fillOpacityOf, type TextFont } from "../../markup/appearance";
 import { appearanceToPdf, FONT_RESOURCE } from "../../markup/pdfAppearance";
 import { colourHex, newId, type Markup, type RGB } from "../../markup/model";
 import { dimensionLine, isMeasure, measureValue } from "../../markup/measure";
@@ -170,6 +170,12 @@ function putCommon(ctx: WriteContext, obj: mupdf.PDFObject, m: Markup) {
   obj.put("F", doc.newInteger(flags));
   if (m.style.opacity < 1) obj.put("CA", doc.newReal(m.style.opacity));
   else obj.delete("CA");
+  // PDF 2.0: /ca is the fill's opacity, and /CA alone covers both
+  const fill = fillOpacityOf(m);
+  if (fill !== m.style.opacity) obj.put("ca", doc.newReal(fill));
+  else obj.delete("ca");
+  if (blendOf(m) === "Multiply") obj.put("BM", doc.newName("Multiply"));
+  else obj.delete("BM");
 }
 
 function putBorder(ctx: WriteContext, obj: mupdf.PDFObject, m: Markup) {
@@ -208,6 +214,7 @@ function putPrivate(ctx: WriteContext, obj: mupdf.PDFObject, m: Markup) {
   if (m.kind === "textbox" || m.kind === "callout") {
     data.font = m.style.fontFamily;
     data.align = m.style.align;
+    if (m.style.valign) data.valign = m.style.valign;
   }
   obj.put(PRIVATE_KEY, ctx.doc.newString(JSON.stringify(data)));
 }
@@ -292,8 +299,6 @@ export function writeMarkup(ctx: WriteContext, annot: mupdf.PDFAnnotation, m: Ma
       for (const stroke of m.inks) ink.push(nums(doc, userPts(T, stroke)));
       obj.put("InkList", ink);
       putBorder(ctx, obj, m);
-      if (m.kind === "highlighter") obj.put("BM", doc.newName("Multiply"));
-      else obj.delete("BM");
       break;
     }
     case "textbox":
@@ -442,9 +447,9 @@ export function writeMarkup(ctx: WriteContext, annot: mupdf.PDFAnnotation, m: Ma
     resources.Font = fonts;
   }
   if (pdf.usesGState) {
-    const gs: Record<string, unknown> = { Type: doc.newName("ExtGState"), CA: ap.opacity, ca: ap.opacity };
+    const gs: Record<string, unknown> = { Type: doc.newName("ExtGState"), CA: ap.opacity, ca: ap.fillOpacity };
     if (ap.blend !== "Normal") gs.BM = doc.newName(ap.blend);
-    resources.ExtGState = { GS0: gs };
+    resources.ExtGState = pdf.usesTextGState ? { GS0: gs, GS1: { Type: doc.newName("ExtGState"), ca: ap.opacity } } : { GS0: gs };
   }
   if (pdf.usesImage && m.image) {
     resources.XObject = { Im0: doc.addImage(new mupdf.Image(m.image.data)) };

@@ -99,3 +99,15 @@ Moving or nudging markups no longer keeps them on the page (decision behind F1 r
 
 ## 38. The markup layer scrolls with the pages (19/10/2026)
 Markups are drawn on canvases inside the scrolling content, moved to the visible area each time they are drawn, rather than on canvases fixed over the viewer. Scrolling happens off the main thread, so a fixed canvas showed the markups one frame or more behind the page; a canvas that scrolls with the pages keeps them in place until it is redrawn. A clipping layer keeps the canvases from adding to the scrolling area.
+
+## 39. A callout's box moves without its arrow tip (21/10/2026)
+A callout picked up by its text box moves the box and the leader's bend, and the arrow tip stays on what it points at, as in the familiar app. Picked up by its leader line, or moved as part of a larger selection or group, the whole callout moves. Arrow-key nudges still move the whole callout, since there is no grab point to tell the two apart. A box dragged over the next page stays on its own page (its tip is there) and hangs over the next one.
+
+## 40. Fill opacity and Highlight use PDF 2.0's own keys (21/10/2026)
+A markup's fill opacity is written as the annotation's /ca and its line opacity as /CA, and Highlight as /BM /Multiply, which is how ISO 32000-2 describes them; the appearance stream's graphics state carries the same values, so older viewers draw it right too. Without a fill opacity of its own a fill follows the line, as before, so existing files and tool sets are unchanged. Text in a text box or callout keeps the line opacity (a second graphics state, /GS1, puts it back), so a see-through background does not fade the words. The pen is left out of Highlight because a multiplied ink annotation is how the highlighter is recognised when a file is opened; the highlighter tool covers that use.
+
+## 41. A snapshot is a picture (21/10/2026)
+A snapshot is drawn from a copy of the page with its markups saved in (as printing does), so it looks as it does in any viewer, at 300 dpi held under 6000 pixels across, and pastes as an image markup with the subject Snapshot at the size it was taken. A vector snapshot (the page's own drawing copied as a form) would stay sharp at any zoom but is a new kind of markup to save, copy between files and read back; 300 dpi is sharper than the screen at the zooms drawings are read at, and the same picture is what other programs need. The system clipboard holds the picture and Drawset's usual line of text, so a paste in Drawset knows it is its own. Only the part of the area on the page is taken. The picture is in the page's own orientation; a page turned in Drawset (not in the file) is turned back for it.
+
+## 42. Vertical text alignment lives in /DrawsetData (21/10/2026)
+ISO 32000 gives free text only a horizontal alignment (/Q), so the vertical one is kept in /DrawsetData and drawn into the appearance stream, which every viewer shows. A viewer that rebuilds the appearance itself (after editing the text there) puts the lines back at the top. Text taller than its box starts at the top whatever the setting, so nothing is pushed above the box.

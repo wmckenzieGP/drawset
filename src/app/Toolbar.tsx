@@ -15,6 +15,7 @@ const GROUPS: [ToolId, string, string][][] = [
     ["pan", "Pan (or hold Space)", "pan"],
     ["zoom", "Zoom: drag a box, or click", "zoom"],
     ["text", "Select text", "text"],
+    ["snapshot", "Snapshot: drag an area to copy it, with its markups, as a picture", "snapshot"],
   ],
   [
     ["textbox", "Text box", "textbox"],

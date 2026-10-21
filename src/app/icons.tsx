@@ -5,6 +5,7 @@ const P: Record<string, ReactElement> = {
   select: <path d="M6 3l12 9-5.5 1.2L15 20l-2.6 1.1-2.6-6.5L6 18z" />,
   pan: <path d="M8 13V6.5a1.5 1.5 0 013 0V12m0-6.5V4.5a1.5 1.5 0 013 0V12m0-6a1.5 1.5 0 013 0v7m0-4a1.5 1.5 0 013 0v5c0 4-2.5 7-6.5 7-3 0-4.5-1.4-6.3-4l-2.5-3.8a1.5 1.5 0 012.4-1.8L8 15" />,
   text: <path d="M5 5h14M12 5v14M9 19h6" />,
+  snapshot: <path d="M4 8V5.5A1.5 1.5 0 015.5 4H8M16 4h2.5A1.5 1.5 0 0120 5.5V8M20 16v2.5a1.5 1.5 0 01-1.5 1.5H16M8 20H5.5A1.5 1.5 0 014 18.5V16M9 10h6v4H9z" />,
   zoom: <path d="M10.5 4a6.5 6.5 0 110 13 6.5 6.5 0 010-13zM15.5 15.5L20 20M8 10.5h5M10.5 8v5" />,
   rectangle: <rect x="4" y="6" width="16" height="12" rx="0.5" />,
   ellipse: <ellipse cx="12" cy="12" rx="8.5" ry="6" />,
