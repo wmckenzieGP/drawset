@@ -3,6 +3,18 @@ import { isContinuous, isPaired, type PageEntry, type PageMode, type Rotation } 
 
 export const PAGE_GAP = 16;
 export const PAD = 24;
+/** How much of the pages (CSS px) stays in the window however far they are dragged. */
+export const KEEP_IN_VIEW = 80;
+
+/** Room added around the pages (CSS px on each side) so they can be dragged past where scrolling would stop. */
+export interface Slack {
+  l: number;
+  t: number;
+  r: number;
+  b: number;
+}
+export const NO_SLACK: Slack = { l: 0, t: 0, r: 0, b: 0 };
+export const sameSlack = (a: Slack, b: Slack) => a.l === b.l && a.t === b.t && a.r === b.r && a.b === b.b;
 
 export interface PageLayout {
   /** The page's index in the document (not its position in `Layout.pages`). */
@@ -47,7 +59,7 @@ export function pageRotation(entry: PageEntry, viewRot: Rotation): number {
   return (entry.rotation + viewRot) % 360;
 }
 
-export function computeLayout(pages: PageEntry[], scale: number, viewRot: Rotation, viewportW: number, mode: PageMode = "continuous", current = 0): Layout {
+export function computeLayout(pages: PageEntry[], scale: number, viewRot: Rotation, viewportW: number, mode: PageMode = "continuous", current = 0, slack: Slack = NO_SLACK): Layout {
   const from = isContinuous(mode) ? 0 : Math.max(0, Math.min(shownFrom(mode, current), pages.length - 1));
   const to = isContinuous(mode) ? pages.length : Math.min(pages.length, from + (isPaired(mode) ? 2 : 1));
   const sized = pages.slice(from, to).map((entry, k) => {
@@ -62,21 +74,51 @@ export function computeLayout(pages: PageEntry[], scale: number, viewRot: Rotati
   for (let i = 0; i < sized.length; i += perRow) rows.push(sized.slice(i, i + perRow));
   const rowW = (r: typeof sized) => r.reduce((a, p) => a + p.w, 0) + PAGE_GAP * (r.length - 1);
   const maxW = rows.reduce((a, r) => Math.max(a, rowW(r)), 0);
-  const width = Math.max(viewportW, maxW + 2 * PAD);
-  let y = PAD;
+  const inner = Math.max(viewportW, maxW + 2 * PAD);
+  const width = inner + slack.l + slack.r;
+  let y = PAD + slack.t;
   const out: PageLayout[] = [];
   for (const r of rows) {
     const h = Math.max(...r.map((p) => p.h));
     // pages in a row share their top edge; a pair is centred as a whole; a lone last page of a pair layout sits in the left column
     const full = perRow === 2 && r.length === 1 && rows.length > 1 ? rowW([r[0], r[0]]) : rowW(r);
-    let x = (width - full) / 2;
+    let x = slack.l + (inner - full) / 2;
     for (const p of r) {
       out.push({ index: p.index, entry: p.entry, x, y, w: p.w, h: p.h, rot: p.rot, m: p.m, inv: invert(p.m) });
       x += p.w + PAGE_GAP;
     }
     y += h + PAGE_GAP;
   }
-  return { pages: out, width, height: Math.max(y - PAGE_GAP + PAD, 0), mode };
+  return { pages: out, width, height: Math.max(y - PAGE_GAP + PAD + slack.b, 0), mode };
+}
+
+/**
+ * Where to scroll so the window's top left is at (`left`, `top`) in `layout` (laid out with `slack`), and the slack
+ * that needs. Past where scrolling stops, room is added around the pages so they can be dragged anywhere, as long as
+ * KEEP_IN_VIEW of them stays in the window. With `grow`, slack already there is kept (while dragging); otherwise the
+ * slack is just what this view needs.
+ */
+export function placeView(layout: Layout, slack: Slack, viewW: number, viewH: number, left: number, top: number, grow = false): { slack: Slack; left: number; top: number } {
+  const ps = layout.pages;
+  if (!ps.length) return { slack, left, top };
+  const axis = (want: number, size: number, view: number, a: number, b: number, before: number, after: number) => {
+    // in the layout without slack
+    const inner = size - before - after;
+    const lo = Math.min(0, a - before + KEEP_IN_VIEW - view);
+    const hi = Math.max(inner - view, b - before - KEEP_IN_VIEW);
+    const at = Math.min(hi, Math.max(lo, want - before));
+    const nb = Math.max(grow ? before : 0, -at);
+    // scrolled away from the start, the content must reach the window's far edge
+    const needAfter = at + nb > 0 ? Math.max(0, at + view - inner) : 0;
+    const na = Math.max(grow ? after : 0, needAfter);
+    return [at + nb, nb, na];
+  };
+  const x0 = Math.min(...ps.map((p) => p.x));
+  const x1 = Math.max(...ps.map((p) => p.x + p.w));
+  const y1 = Math.max(...ps.map((p) => p.y + p.h));
+  const [x, l, r] = axis(left, layout.width, viewW, x0, x1, slack.l, slack.r);
+  const [y, t, b] = axis(top, layout.height, viewH, ps[0].y, y1, slack.t, slack.b);
+  return { slack: { l, t, r, b }, left: x, top: y };
 }
 
 /** First and last position in `layout.pages` intersecting [top, bottom] (binary search). */

@@ -90,3 +90,12 @@ A placed signature is a /Stamp with /Name /Signature and /IT /StampImage whose a
 
 ## 35. Pictures are read back from saved files (18/10/2026)
 Image and signature markups opened from a file now get their picture from the appearance's image XObject (with its soft mask as alpha) so they can be moved, resized and saved again; MuPDF premultiplies alpha and its PNG writer divides it out, so colours are premultiplied before writing. If the picture cannot be read the appearance is kept as it was.
+
+## 36. Dragging the view past the pages adds room, only while it is needed (19/10/2026)
+Panning (wheel button, Space or the Pan tool) moves the page one-to-one with the pointer in every direction, as in the familiar app, even when the page fits the window. Rather than a transform the rest of the viewer would have to know about, room ("slack") is added to the layout around the pages exactly where scrolling would stop, so every screen-to-page conversion stays the same; it grows while dragging and is trimmed to what the view needs when the drag ends. At least 80 px of the pages stays in the window, so a page is never lost. Wheel zoom and zoom to a box use the same placement, so a dragged page stays under the pointer; fit and go-to-page remove the room. The viewer keeps a gutter for its scroll bar so the bar appearing mid-drag does not shift the page. The browser's own wheel-button scrolling is turned off in the viewer.
+
+## 37. Markups may lie partly off their page (19/10/2026)
+Moving or nudging markups no longer keeps them on the page (decision behind F1 reversed at William's request): they stay on their own page unless dropped over another, and may hang past its edge or over the next page. They are drawn there and picked by their overhanging part, and are saved with their /Rect partly outside the page; other PDF viewers and printing cut them at the page edge, which is standard. Pasting still keeps new markups on the page.
+
+## 38. The markup layer scrolls with the pages (19/10/2026)
+Markups are drawn on canvases inside the scrolling content, moved to the visible area each time they are drawn, rather than on canvases fixed over the viewer. Scrolling happens off the main thread, so a fixed canvas showed the markups one frame or more behind the page; a canvas that scrolls with the pages keeps them in place until it is redrawn. A clipping layer keeps the canvases from adding to the scrolling area.

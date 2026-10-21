@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { transformRect, type Rect } from "../../markup/geometry";
 import { focusPane, isContinuous, isPaired, scrollToPage, setView, updateTab, useApp, wheelAction, type DocTab, type Pane } from "../../state/store";
 import { followPane, leadPane, publishPosition } from "./splitSync";
 import { Controller, useInteraction, type ViewerHost } from "./controller";
-import { computeLayout, pageByIndex, PAGE_GAP, pageStep, shownFrom, visibleRange, type Layout, type PageLayout } from "./layout";
+import { computeLayout, NO_SLACK, pageByIndex, PAGE_GAP, pageStep, placeView, sameSlack, shownFrom, visibleRange, type Layout, type PageLayout, type Slack } from "./layout";
 import { drawOverlay, addBitmapListener } from "./overlay";
 import { previewScale, renderCache, TILE } from "./renderCache";
 import { TextEditor } from "./TextEditor";
 import { useCursor } from "./cursor";
 import { ViewerMenu, type MenuAt } from "./ViewerMenu";
 import { dropImages } from "../../app/clipboard";
+
+/** The button last pressed with the mouse or a pen (it keeps the focus after the click). */
+let lastClicked: Element | null = null;
+if (typeof window !== "undefined") window.addEventListener("pointerdown", (e) => (lastClicked = (e.target as Element | null)?.closest?.("button") ?? null), true);
 
 export const MIN_SCALE = 0.02;
 export const MAX_SCALE = 64;
@@ -86,9 +91,28 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
   const mode = tab.view.mode;
   // a single-page layout is rebuilt when the page (or pair) shown changes, not on every current-page change
   const shown = isContinuous(mode) ? 0 : shownFrom(mode, tab.currentPage);
-  const layout: Layout = useMemo(() => computeLayout(tab.state.pages, tab.view.scale, tab.view.rotation, size.w, mode, shown), [tab.state.pages, tab.view.scale, tab.view.rotation, size.w, mode, shown]);
+  // room around the pages for dragging them past where scrolling stops
+  const [slack, setSlack] = useState<Slack>(NO_SLACK);
+  const slackRef = useRef(slack);
+  slackRef.current = slack;
+  const layout: Layout = useMemo(
+    () => computeLayout(tab.state.pages, tab.view.scale, tab.view.rotation, size.w, mode, shown, slack),
+    [tab.state.pages, tab.view.scale, tab.view.rotation, size.w, mode, shown, slack],
+  );
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
+
+  /** Scrolls the window's top left to (`left`, `top`), adding room around the pages where scrolling would stop; returns how far the content moved for that room. */
+  const place = useCallback((left: number, top: number, grow = false): [number, number] => {
+    const el = scrollRef.current;
+    if (!el) return [0, 0];
+    const was = slackRef.current;
+    const to = placeView(layoutRef.current, was, el.clientWidth, el.clientHeight, left, top, grow);
+    if (!sameSlack(to.slack, was)) flushSync(() => setSlack(to.slack));
+    el.scrollLeft = to.left;
+    el.scrollTop = to.top;
+    return [to.slack.l - was.l, to.slack.t - was.t];
+  }, []);
 
   const drawRef = useRef<() => void>(() => {});
   const frame = useRef(0);
@@ -117,12 +141,9 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
     requestAnimationFrame(() => {
       const nl = layoutRef.current;
       const np = target ? pageByIndex(nl, target.index) : null;
-      if (np && target) {
-        el.scrollLeft = np.x + target.px * np.w - anchorX;
-        el.scrollTop = np.y + target.py * np.h - anchorY;
-      }
+      if (np && target) place(np.x + target.px * np.w - anchorX, np.y + target.py * np.h - anchorY);
     });
-  }, []);
+  }, [place]);
 
   const host = useMemo<ViewerHost>(
     () => ({
@@ -143,9 +164,13 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
           const np = pageByIndex(layoutRef.current, page.index);
           if (!np) return;
           const nd = transformRect(r, np.m);
-          el.scrollLeft = np.x + (nd[0] + nd[2]) / 2 - el.clientWidth / 2;
-          el.scrollTop = np.y + (nd[1] + nd[3]) / 2 - el.clientHeight / 2;
+          place(np.x + (nd[0] + nd[2]) / 2 - el.clientWidth / 2, np.y + (nd[1] + nd[3]) / 2 - el.clientHeight / 2);
         });
+      },
+      panTo: (left, top) => place(left, top, true),
+      panEnd: () => {
+        const el = scrollRef.current;
+        if (el) place(el.scrollLeft, el.scrollTop);
       },
       zoomBy: (factor, clientX, clientY) => {
         const el = scrollRef.current;
@@ -154,7 +179,7 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
         zoomTo(tabRef.current.view.scale * factor, clientX - r.left, clientY - r.top);
       },
     }),
-    [redraw, zoomTo],
+    [redraw, zoomTo, place],
   );
   const controller = useMemo(() => new Controller(host), [host]);
   useEffect(() => {
@@ -166,14 +191,18 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
     const m = multiplyRef.current?.getContext("2d");
     const el = scrollRef.current;
     if (!n || !m || !el) return;
+    // the markups are drawn for the window as it is now, on canvases that scroll with the pages: while the window
+    // scrolls before the next drawing, they move with the pages instead of lagging behind them
+    const [left, top] = [el.scrollLeft, el.scrollTop];
+    for (const c of [n.canvas, m.canvas]) c.style.transform = `translate(${left}px, ${top}px)`;
     drawOverlay({
       normal: n,
       multiply: m,
       width: el.clientWidth,
       height: el.clientHeight,
       dpr,
-      scrollLeft: el.scrollLeft,
-      scrollTop: el.scrollTop,
+      scrollLeft: left,
+      scrollTop: top,
       layout: layoutRef.current,
       tab: tabRef.current,
       controller,
@@ -200,24 +229,23 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
     return followPane(pane, (pos) => {
       const el = scrollRef.current;
       if (!el) return;
-      const place = () => {
+      const show = () => {
         const index = Math.min(pos.page, tabRef.current.state.pages.length - 1);
         const p = pageByIndex(layoutRef.current, index);
         if (!p) {
           // a single-page layout shows the other pane's page first
           updateTab(tabRef.current.key, (t) => ({ ...t, currentPage: index }));
-          requestAnimationFrame(place);
+          requestAnimationFrame(show);
           return;
         }
-        el.scrollLeft = p.x + pos.px * p.w - el.clientWidth / 2;
-        el.scrollTop = p.y + pos.py * p.h - el.clientHeight / 2;
+        place(p.x + pos.px * p.w - el.clientWidth / 2, p.y + pos.py * p.h - el.clientHeight / 2);
       };
       if (Math.abs(tabRef.current.view.scale - pos.scale) > 1e-9) {
         setView(tabRef.current.key, { scale: pos.scale });
-        requestAnimationFrame(place);
-      } else place();
+        requestAnimationFrame(show);
+      } else show();
     });
-  }, [pane]);
+  }, [pane, place]);
   // zoom changes lead too (scrolling alone does not fire when the position stays put)
   useEffect(() => {
     requestAnimationFrame(() => publish());
@@ -263,6 +291,8 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
     const req = tab.view.scrollTo;
     const el = scrollRef.current;
     if (!req || !el) return;
+    // going to a page puts it back in its usual place
+    if (!sameSlack(slackRef.current, NO_SLACK)) return setSlack(NO_SLACK);
     const p = pageByIndex(layout, req.page);
     // a single-page layout first has to show the page
     if (!p) return;
@@ -385,8 +415,9 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
       if (pane && useApp.getState().split?.focus !== pane) return;
       const target = e.target as HTMLElement;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable)) return;
-      // keys in an open right-click menu are the menu's, and Enter on a button presses it
-      if (menuOpen.current || (target?.tagName === "BUTTON" && (e.key === "Enter" || e.key === " "))) return;
+      // keys in an open right-click menu are the menu's, and Enter or Space on a button reached by keyboard presses it
+      // (a button clicked with the mouse keeps the focus, but the keys still go to the page: Space pans)
+      if (menuOpen.current || (target?.tagName === "BUTTON" && (e.key === "Enter" || e.key === " ") && target !== lastClicked)) return;
       if (e.code === "Space" && !useInteraction.getState().spaceDown) {
         useInteraction.setState({ spaceDown: true, cursor: "grab" });
         e.preventDefault();
@@ -438,6 +469,8 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
         data-testid="viewer"
         onScroll={onScroll}
         onPointerDown={onPointerDown}
+        // pressing the wheel drags the page; the browser's own wheel-button scrolling would fight it
+        onMouseDown={(e) => e.button === 1 && e.preventDefault()}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onDoubleClick={(e) => controller.doubleClick(e.nativeEvent)}
@@ -460,10 +493,13 @@ export function Viewer({ tab, pane }: { tab: DocTab; pane?: Pane }) {
             <PageView key={p.entry.id} tab={tab} page={p} view={view} dpr={dpr} />
           ))}
           {editing && editingPage && editorRect && <TextEditor key={editing.id} tab={tab} markup={editing} rect={editorRect} scale={Math.hypot(editingPage.m[0], editingPage.m[1])} />}
+          {/* markups, selection and drawing in progress (clipped, so they never add to the scrolling area) */}
+          <div className="overlay-layer">
+            <canvas ref={multiplyRef} className="overlay overlay-multiply" width={size.w * dpr} height={size.h * dpr} style={{ width: size.w, height: size.h }} />
+            <canvas ref={normalRef} className="overlay" width={size.w * dpr} height={size.h * dpr} style={{ width: size.w, height: size.h }} />
+          </div>
         </div>
       </div>
-      <canvas ref={multiplyRef} className="overlay overlay-multiply" width={size.w * dpr} height={size.h * dpr} style={{ width: size.w, height: size.h }} />
-      <canvas ref={normalRef} className="overlay" width={size.w * dpr} height={size.h * dpr} style={{ width: size.w, height: size.h }} />
       <ViewerMenu tab={tab} menu={menu} controller={controller} onClose={() => setMenu(null)} />
     </div>
   );

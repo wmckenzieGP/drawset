@@ -7,10 +7,7 @@ import { addTab, commit, isDirty, setLoadedMarkups, undo, useApp, withGroups, wi
 import { saveTab } from "../../src/state/documents";
 import { deletePages } from "../../src/features/pages/pageOps";
 import { openMupdf } from "./helpers/mupdf";
-import { keepOnPage } from "../../src/features/viewer/controller";
-import { computeLayout } from "../../src/features/viewer/layout";
-import { markupBounds } from "../../src/markup/appearance";
-import { cloneMarkup, relinkGroups, translate } from "../../src/markup/edit";
+import { cloneMarkup, relinkGroups } from "../../src/markup/edit";
 import { arranged } from "../../src/app/commands";
 
 const host = vi.hoisted(() => ({ dest: undefined as string | null | undefined, write: null as null | ((b: Uint8Array) => void) }));
@@ -113,18 +110,25 @@ describe("document state", () => {
     expect(doc.loadPage(1).getAnnotations().filter((a) => a.getContents() === "Moved over").length).toBe(1);
   });
 
-  it("markups dragged past the page edge are kept on the page", () => {
-    const info = core.open(read("annotated.pdf"), "annotated.pdf");
-    const key = addTab(info, "annotated.pdf", null);
-    const layout = computeLayout(tabOf(key).state.pages, 1, 0, 1000);
-    const page = layout.pages[0];
-    const b = page.entry.info.bounds;
-    const box = mk("textbox", { pageId: page.entry.id, rect: [100, 100, 200, 140], points: [] });
-    const [out] = keepOnPage(page, [translate(box, 0, b[3] + 500)]);
-    const r = markupBounds(out);
-    expect(r[3]).toBeLessThanOrEqual(b[3] + 1e-6);
-    expect(r[1]).toBeGreaterThanOrEqual(b[1]);
-    expect(r[0]).toBe(markupBounds(box)[0]);
+  it("a callout hanging off the page edge is saved and read back where it was put", async () => {
+    const info = core.open(read("calibration.pdf"), "calibration.pdf");
+    const key = addTab(info, "calibration.pdf", null);
+    setLoadedMarkups(key, []);
+    const page = tabOf(key).state.pages[0];
+    const b = page.info.bounds;
+    // the text box half past the right edge, the tip on the page
+    const box: [number, number, number, number] = [b[2] - 60, 100, b[2] + 60, 140];
+    const c = mk("callout", { pageId: page.id, rect: box, points: [[b[2] - 200, 300], [b[2] - 60, 120]], contents: "Over the edge" });
+    commit(key, "Add callout", (s) => withMarkups(s, [c]));
+    host.dest = null;
+    let written: Uint8Array | null = null;
+    host.write = (bytes) => void (written = bytes);
+    expect(await saveTab(key)).toBe(true);
+    const back = core.open(written!, "calibration.pdf");
+    const r = core.readMarkups(back.docId).find((x) => x.contents === "Over the edge")!;
+    expect(r.pageIndex).toBe(0);
+    r.rect.forEach((v, i) => expect(v).toBeCloseTo(box[i], 1));
+    expect(r.rect[2]).toBeGreaterThan(b[2]);
   });
 
   it("bring to front and send to back change the drawing order, and the saved file keeps it", async () => {
