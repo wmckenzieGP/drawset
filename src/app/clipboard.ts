@@ -46,6 +46,21 @@ export function copySelection(): boolean {
   return false;
 }
 
+/**
+ * Puts a picture markup (a snapshot) on the clipboard. Drawset pastes the markup itself, at the size it was taken;
+ * other programs get the picture. The line of text beside it marks it as the latest copy, as for markups.
+ */
+export async function copyPicture(docId: string, m: Markup, png: Blob): Promise<void> {
+  const token = `[Drawset: snapshot ${Date.now().toString(36)}]`;
+  const copied = { docId, markups: [m], token, onSystem: false };
+  clipboard = copied;
+  let ok = false;
+  if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+    ok = await navigator.clipboard.write([new ClipboardItem({ "text/plain": new Blob([token], { type: "text/plain" }), "image/png": png })]).then(() => true, () => false);
+  }
+  copied.onSystem = ok || (await writeSystemText(token));
+}
+
 /** The pointer's spot when it is over a page of the active document. */
 export function pointerSpot(): PastePoint | null {
   const t = activeTab();
@@ -163,8 +178,9 @@ export async function pasteFromMenu(at: PastePoint | null) {
     let text = "";
     for (const item of items) {
       const type = item.types.find((x) => x.startsWith("image/"));
-      if (type) return await pasteData({ text: "", image: { bytes: new Uint8Array(await (await item.getType(type)).arrayBuffer()), mime: type } }, at);
       if (item.types.includes("text/plain")) text = await (await item.getType("text/plain")).text();
+      // a snapshot's picture comes with its line of text, which says it is Drawset's own
+      if (type) return await pasteData({ text, image: { bytes: new Uint8Array(await (await item.getType(type)).arrayBuffer()), mime: type } }, at);
     }
     return await pasteData({ text, image: null }, at);
   } catch {
