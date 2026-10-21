@@ -11,7 +11,7 @@ import { markupBounds } from "../../markup/appearance";
 import { clickField } from "../forms/forms";
 import { openLinkDialog } from "../links/LinkDialog";
 import { describeTarget, followLink } from "../links/navigate";
-import { canResize, cloneMarkup, hitTest, relinkGroups, scaleBetween, setVertex, translate, vertexHandles, withDerivedRect } from "../../markup/edit";
+import { canResize, cloneMarkup, hitTest, moveCalloutBox, pointInRect, relinkGroups, scaleBetween, setVertex, translate, vertexHandles, withDerivedRect } from "../../markup/edit";
 import { formatDate, KIND_LABELS, newId, nowIso, type Markup, type MarkupKind } from "../../markup/model";
 import { changeLive, commit, flash, settleLive, showPanel, updateTab, useApp, usePainter, withGroups, withMarkups, type DocState, type DocTab, type ToolId } from "../../state/store";
 import { eraseStrokes, simplifyStroke } from "../../markup/ink";
@@ -53,7 +53,8 @@ type DragState =
   | { t: "idle" }
   | { t: "pan"; sx: number; sy: number; left: number; top: number; button: number }
   | { t: "marquee"; page: PageLayout; a: Pt; b: Pt; additive: boolean }
-  | { t: "move"; page: PageLayout; start: Pt; last: Pt; originals: Markup[]; moved: boolean; at?: Pt; copy?: { toggle: string } }
+  /** `tipStays`: a lone callout picked up by its text box, which moves without its arrow tip. */
+  | { t: "move"; page: PageLayout; start: Pt; last: Pt; originals: Markup[]; moved: boolean; at?: Pt; copy?: { toggle: string }; tipStays?: boolean }
   | { t: "resize"; page: PageLayout; original: Markup; handle: Handle; frame: Rect; current: Markup }
   | { t: "vertex"; page: PageLayout; original: Markup; index: number; current: Markup }
   | { t: "box"; kind: MarkupKind | "zoom" | "labelregion" | "cloudplus"; page: PageLayout; a: Pt; b: Pt; moved: boolean }
@@ -180,9 +181,15 @@ export class Controller {
     if ((d.t === "resize" || d.t === "vertex") && d.original.id === m.id) return d.current;
     if (d.t === "move" && d.moved && !d.copy) {
       const o = d.originals.find((x) => x.id === m.id);
-      if (o) return translate(o, d.last[0] - d.start[0], d.last[1] - d.start[1]);
+      if (o) return this.shifted(d, o);
     }
     return m;
+  }
+
+  /** A markup where the move has taken it so far. */
+  private shifted(d: Extract<DragState, { t: "move" }>, m: Markup): Markup {
+    const [dx, dy] = [d.last[0] - d.start[0], d.last[1] - d.start[1]];
+    return d.tipStays ? moveCalloutBox(m, dx, dy) : translate(m, dx, dy);
   }
 
   /** In-progress markup to draw as a preview. */
@@ -390,7 +397,10 @@ export class Controller {
           this.setSelection(sel);
         }
         const originals = sel.map((id) => tab.state.markups[id]).filter((m) => m && !m.locked && m.pageId === target.entry.id);
-        this.drag = { t: "move", page: target, start: p, last: p, originals, moved: false };
+        // a callout on its own, picked up by its text box, leaves its arrow tip where it points; by its leader it moves whole
+        const one = originals.length === 1 ? originals[0] : null;
+        const tipStays = one?.kind === "callout" && pointInRect(p, inflate(one.rect, this.tol(target, 4)));
+        this.drag = { t: "move", page: target, start: p, last: p, originals, moved: false, tipStays };
         return;
       }
       if (!e.shiftKey && !e.ctrlKey && tab.fields?.length && clickField(tab, target.entry.src, p)) return;
@@ -674,7 +684,9 @@ export class Controller {
           break;
         }
         if (d.moved && d.originals.length) {
-          const moved = this.placeMoved(d.page, d.at ?? null, d.originals.map((m) => translate(m, d.last[0] - d.start[0], d.last[1] - d.start[1])));
+          const shifted = d.originals.map((m) => this.shifted(d, m));
+          // a callout's tip stays on its page, so its box may reach over the next page rather than move there
+          const moved = d.tipStays ? shifted : this.placeMoved(d.page, d.at ?? null, shifted);
           commit(tab.key, d.originals.length > 1 ? "Move markups" : "Move markup", (s) => withMarkups(s, moved));
         }
         break;

@@ -99,3 +99,6 @@ Moving or nudging markups no longer keeps them on the page (decision behind F1 r
 
 ## 38. The markup layer scrolls with the pages (19/10/2026)
 Markups are drawn on canvases inside the scrolling content, moved to the visible area each time they are drawn, rather than on canvases fixed over the viewer. Scrolling happens off the main thread, so a fixed canvas showed the markups one frame or more behind the page; a canvas that scrolls with the pages keeps them in place until it is redrawn. A clipping layer keeps the canvases from adding to the scrolling area.
+
+## 39. A callout's box moves without its arrow tip (21/10/2026)
+A callout picked up by its text box moves the box and the leader's bend, and the arrow tip stays on what it points at, as in the familiar app. Picked up by its leader line, or moved as part of a larger selection or group, the whole callout moves. Arrow-key nudges still move the whole callout, since there is no grab point to tell the two apart. A box dragged over the next page stays on its own page (its tip is there) and hangs over the next one.

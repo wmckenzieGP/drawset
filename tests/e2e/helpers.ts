@@ -33,6 +33,6 @@ export async function markups(page: Page) {
   return page.evaluate(() => {
     const s = (window as unknown as { __drawset: { useApp: { getState: () => any } } }).__drawset.useApp.getState();
     const t = s.tabs.find((x: any) => x.key === s.active);
-    return t ? (Object.values(t.state.markups) as any[]).map((m) => ({ id: m.id, kind: m.kind, rect: m.rect as number[], status: m.status, contents: m.contents, locked: m.locked })) : [];
+    return t ? (Object.values(t.state.markups) as any[]).map((m) => ({ id: m.id, kind: m.kind, rect: m.rect as number[], points: m.points as number[][], status: m.status, contents: m.contents, locked: m.locked })) : [];
   });
 }
