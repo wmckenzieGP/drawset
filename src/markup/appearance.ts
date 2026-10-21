@@ -258,14 +258,24 @@ export function wrapText(font: TextFont, size: number, text: string, maxWidth: n
 export const LINE_HEIGHT = 1.2;
 const ASCENT = 0.8;
 
-export function layoutText(font: TextFont, size: number, text: string, box: Rect, pad: number, align: 0 | 1 | 2) {
+export function layoutText(font: TextFont, size: number, text: string, box: Rect, pad: number, align: 0 | 1 | 2, valign: 0 | 1 | 2 = 0) {
   const innerW = Math.max(1, box[2] - box[0] - 2 * pad);
   const lines = wrapText(font, size, text, innerW);
+  const top = box[1] + pad + textDrop(size, lines.length, box[3] - box[1] - 2 * pad, valign);
   return lines.map((s, i) => {
     const w = textWidth(font, size, s);
     const x = align === 0 ? box[0] + pad : align === 1 ? (box[0] + box[2]) / 2 - w / 2 : box[2] - pad - w;
-    return { x, y: box[1] + pad + size * ASCENT + i * size * LINE_HEIGHT, s };
+    return { x, y: top + size * ASCENT + i * size * LINE_HEIGHT, s };
   });
+}
+
+/**
+ * How far below the top padding `lines` lines of text start in `room` points of height: none at the top, half the
+ * spare height in the middle, all of it at the bottom. Text too tall for its box starts at the top.
+ */
+export function textDrop(size: number, lines: number, room: number, valign: 0 | 1 | 2 = 0): number {
+  const spare = room - (Math.max(1, lines) * size * LINE_HEIGHT - size * (LINE_HEIGHT - 1));
+  return valign === 0 || spare <= 0 ? 0 : valign === 1 ? spare / 2 : spare;
 }
 
 /** Height a text box needs for its text at the given width. */
@@ -443,7 +453,7 @@ function textBoxOps(m: Markup): DrawOp[] {
     ops.push({ t: "path", segs: rectSegs(inflate(m.rect, -inset)), fill: s.fill, stroke, width: s.width, dash: s.dash });
   }
   if (m.contents) {
-    ops.push({ t: "text", font: s.fontFamily, size: s.fontSize, color: s.textColor, lines: layoutText(s.fontFamily, s.fontSize, m.contents, m.rect, textPadding(m), s.align) });
+    ops.push({ t: "text", font: s.fontFamily, size: s.fontSize, color: s.textColor, lines: layoutText(s.fontFamily, s.fontSize, m.contents, m.rect, textPadding(m), s.align, s.valign) });
   }
   return ops;
 }

@@ -214,6 +214,7 @@ function putPrivate(ctx: WriteContext, obj: mupdf.PDFObject, m: Markup) {
   if (m.kind === "textbox" || m.kind === "callout") {
     data.font = m.style.fontFamily;
     data.align = m.style.align;
+    if (m.style.valign) data.valign = m.style.valign;
   }
   obj.put(PRIVATE_KEY, ctx.doc.newString(JSON.stringify(data)));
 }

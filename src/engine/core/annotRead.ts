@@ -294,6 +294,7 @@ export function readPageMarkups(page: mupdf.PDFPage, pageIndex: number): MarkupR
       fontSize: da.size,
       textColor: da.color,
       align: (obj.get("Q").isNumber() ? Math.max(0, Math.min(2, obj.get("Q").asNumber())) : 0) as 0 | 1 | 2,
+      ...(priv.valign === 1 || priv.valign === 2 ? { valign: priv.valign } : {}),
     };
     const rec: MarkupRecord = {
       id: str(obj.get("NM")) || `obj-${num}`,

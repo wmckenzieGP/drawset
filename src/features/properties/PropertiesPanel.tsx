@@ -169,6 +169,14 @@ function StyleEditor({ kinds, style, onStyle }: { kinds: MarkupKind[]; style: Ma
               <option value={2}>Right</option>
             </select>
           </label>
+          <label className="prop-row">
+            <span>Vertical</span>
+            <select value={style.valign ?? 0} onChange={(e) => onStyle({ valign: Number(e.target.value) as 0 | 1 | 2 }, "valign")} data-testid="prop-valign">
+              <option value={0}>Top</option>
+              <option value={1}>Middle</option>
+              <option value={2}>Bottom</option>
+            </select>
+          </label>
         </>
       )}
     </>

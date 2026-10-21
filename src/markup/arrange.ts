@@ -127,7 +127,7 @@ export function paintedStyle(source: Markup, target: Markup): MarkupStyle {
   if (END_KINDS.has(source.kind) && END_KINDS.has(target.kind)) [out.lineStart, out.lineEnd] = [s.lineStart, s.lineEnd];
   if (source.kind === "cloud" && target.kind === "cloud") out.cloudIntensity = s.cloudIntensity;
   const texty = (k: MarkupKind) => TEXT_KINDS.has(k);
-  if (texty(source.kind) && texty(target.kind)) Object.assign(out, { fontFamily: s.fontFamily, fontSize: s.fontSize, textColor: s.textColor, align: s.align });
+  if (texty(source.kind) && texty(target.kind)) Object.assign(out, { fontFamily: s.fontFamily, fontSize: s.fontSize, textColor: s.textColor, align: s.align, valign: s.valign });
   else if (source.kind === target.kind) out.fontSize = s.fontSize;
   return out;
 }

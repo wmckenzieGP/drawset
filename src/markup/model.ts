@@ -73,6 +73,8 @@ export interface MarkupStyle {
   textColor: RGB;
   /** 0 left, 1 centre, 2 right. */
   align: 0 | 1 | 2;
+  /** Text box and callout lines: 0 (or absent) at the top, 1 in the middle, 2 at the bottom. Kept in /DrawsetData. */
+  valign?: 0 | 1 | 2;
 }
 
 export interface Reply {
